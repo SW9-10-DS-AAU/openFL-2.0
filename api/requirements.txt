@@ -1,0 +1,9 @@
+torch == 2.4
+torchvision == 0.19
+numpy
+web3
+termcolor
+matplotlib
+eth-abi
+jupyter
+pandas
