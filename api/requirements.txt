@@ -11,6 +11,7 @@ termcolor==2.2.0
 # Ethereum
 web3==5.31.3
 eth-abi==2.2.0
+py-solc-x==2.0.4
 
 # Jupyter bits
 jupyter==1.0.0
