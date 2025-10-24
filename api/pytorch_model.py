@@ -16,6 +16,9 @@ from torchvision import datasets, transforms
 from torchvision.datasets import CIFAR10, MNIST
 from torch.utils.data import DataLoader, random_split
 
+# Added
+RNG = np.random.default_rng()
+
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 bad_c  = "#d62728"
 free_c = "#9467bd"
@@ -23,15 +26,15 @@ colors.remove(bad_c)
 colors.remove(free_c)
 
 class Participant:
-    def __init__(self, _id, _train, _val, _model, _optimizer, _criterion, 
-                 _attitude, _default_collateral, _max_collateral, 
+    def __init__(self, _id, _train, _val, _model, _optimizer, _criterion,
+                 _attitude, _default_collateral, _max_collateral,
                  _attitudeSwitch=1, number_of_participants=None):
         self.id = _id
         self.train = _train
         self.val  = _val
         self.model = _model
         self.previousModel = copy.deepcopy(_model)
-        self.modelHash = Web3.solidityKeccak(['string'],[str(_model)]).hex()
+        self.modelHash = Web3.solidity_keccak(['string'],[str(_model)]).hex()
         self.optimizer = _optimizer
         self.criterion = _criterion
         self.userToEvaluate = []
@@ -43,10 +46,24 @@ class Participant:
         self.address = None
         self.privateKey = None
         self.isRegistered = False
-        self.collateral = _default_collateral + np.random.randint(0,int(_max_collateral-_default_collateral))
-        self.color = get_color(number_of_participants, self.attitude)         
+        # Old:  self.collateral = _default_collateral + np.random.randint(0,int(_max_collateral-_default_collateral))
+        # ---- collateral (handles huge ranges; avoids int32 cap) ----
+        lo = int(_default_collateral)
+        hi = int(_max_collateral)
+        if hi < lo:
+            raise ValueError(f"max_collateral ({hi}) must be >= default_collateral ({lo})")
+
+        diff = hi - lo
+        jitter = int(RNG.integers(0, np.int64(diff), dtype=np.int64)) if diff > 0 else 0
+        self.collateral = lo + jitter
+
+        # ---- secret (big nonce) ----
+        self.secret = int(RNG.integers(0, np.int64(10 ** 18), dtype=np.int64))
+        # self.secret = np.random.randint(0,int(1e18))
+
+        self.color = get_color(number_of_participants, self.attitude)
         self.roundRep = 0
-        self.secret = np.random.randint(0,int(1e18))
+
         self.disqualified = False
 
         # INTERFACE VARIABLES
@@ -298,10 +315,8 @@ class PytorchModel:
             print(green("{:<17} {} | Epoche {:>2} | Accuracy {:>3.0f} % | Loss {:>6,.2f}".format("Account testing:   ",
                                                                                 user.address[0:16]+"...",
                                                                                 *_dataload)))
-            
 
-            
-            user.hashedModel = self.get_hash(user.model.state_dict())
+            user.hashedModel = self.get_hash(user.model.state_dict()) # OH NO
             print("-----------------------------------------------------------------------------------")
 
         print(b("=========================== FEDERATED LEARNING END ================================\n"))
@@ -355,7 +370,7 @@ class PytorchModel:
                     print(red("Address {} going to add random noise to weights".format(user.address[0:16]+"...")))
                     user.model.load_state_dict(add_noise(copy.deepcopy(user.model)))
                     
-                user.hashedModel = self.get_hash(user.model.state_dict())    
+                user.hashedModel = self.get_hash(user.model.state_dict())
                 loss, accuracy = test(user.model, self.test, DEVICE)
                 print("{:<17} {} |  Testing  | Accuracy {:>3.0f} % | Loss ∞\n".format("Account testing:   ",
                                                                                 user.address[0:16]+"...",

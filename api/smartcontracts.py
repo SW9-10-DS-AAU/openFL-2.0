@@ -8,7 +8,7 @@ import random
 import warnings
 import numpy as np
 import pandas as pd
-from eth_abi import *
+from eth_abi import encode
 from web3 import Web3
 from termcolor import colored
 import matplotlib.pyplot as plt 
@@ -63,9 +63,15 @@ class Helper:
         if not infura_url:
             with open("infuraurl", "r") as inf:
                 infura_url = inf.read().strip()
+
+
+
+
+
+
         if fork:
             if not manual_setup:
-                port = 8545
+                port = 7545
                 process = Popen(["lsof", "-i", ":{0}".format(port)], stdout=PIPE, stderr=PIPE)
                 stdout, stderr = process.communicate()
                 for process in str(stdout.decode("utf-8")).split("\n")[1:]:       
@@ -80,16 +86,25 @@ class Helper:
             time.sleep(1)
             try:
                 if fork:
-                    w3 = Web3(Web3.HTTPProvider("HTTP://127.0.0.1:8545"))
+                    w3 = Web3(Web3.HTTPProvider("HTTP://127.0.0.1:7545"))
+                    print("Connected:", w3.is_connected())
+                    print("Client:", w3.client_version)
+                    print("Chain ID:", w3.eth.chain_id)
+                    print("Latest block:", w3.eth.block_number)
+                    print("Accounts:", w3.eth.accounts[:3])
+                    print("Default account:", w3.eth.default_account)
+                    w3.eth.default_account = w3.eth.accounts[0]
+                    print("New Default account:", w3.eth.default_account)
+
                 else:
                     w3 = Web3(Web3.HTTPProvider(infura_url))
-                latestBlock = w3.eth.getBlock("latest").number
+                latestBlock = w3.eth.block_number
             except:
                 latestBlock = 1000000
         
         
         #print("\n==================================================================================\n")
-        print("Connected to Ethereum: {}".format(colored(w3.isConnected(), "green", attrs=['bold'])))
+        print("Connected to Ethereum: {}".format(colored(w3.is_connected(), "green", attrs=['bold'])))
         print("initiated Ganache-Client @ Block Nr. {:,.0f}\n".format(latestBlock))        
         print("Total Contributers:       {}".format(NUMBER_OF_CONTRIBUTORS))
         print("Good Contributers:        {} ({:.0f}%)".format(NUMBER_OF_GOOD_CONTRIBUTORS,
@@ -121,11 +136,11 @@ class Helper:
         # Every user receives an address
         for ix in range(len(self.pytorch_model.participants)):
             if fork:
-                self.pytorch_model.participants[ix].address = w3.toChecksumAddress(w3.eth.accounts[ix])    
+                self.pytorch_model.participants[ix].address = w3.to_checksum_address(w3.eth.accounts[ix])
             else:
                 if ix == 0:
                     w3.eth.default_account = accounts[ix].address 
-                self.pytorch_model.participants[ix].address = w3.toChecksumAddress(accounts[ix].address) 
+                self.pytorch_model.participants[ix].address = w3.to_checksum_address(accounts[ix].address)
                 self.pytorch_model.participants[ix].privateKey = accounts[ix].privateKey           
                 
             
@@ -169,8 +184,8 @@ class Helper:
     
     def buildTx(self, _from, _to, _value=0):
         assert(_to != "0x0000000000000000000000000000000000000000")
-        _from = w3.toChecksumAddress(_from)
-        _to = w3.toChecksumAddress(_to)        
+        _from = w3.to_checksum_address(_from)
+        _to = w3.to_checksum_address(_to)
         return {
             'from': _from,
             'to': _to,
@@ -267,7 +282,7 @@ class FLManager(Helper):
 
             genesisHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
             
-        receipt = self.w3.eth.waitForTransactionReceipt(genesisHash,
+        receipt = self.w3.eth.wait_for_transaction_receipt(genesisHash,
                                                         timeout=600, 
                                                         poll_latency=1)
         self.gas_deploy.append(receipt["gasUsed"])
@@ -300,9 +315,10 @@ class FLManager(Helper):
         value = reward + p1_collateral
         deployer =  self.pytorch_model.participants[0].address
         modelHash = self.pytorch_model.participants[0].modelHash
+        model_hash_bytes = Web3.to_bytes(hexstr=modelHash)
         if self.fork:
             tx = super().buildTx(deployer, self.manager.address, value)
-            txHash = self.manager.functions.deployModel(modelHash,
+            txHash = self.manager.functions.deployModel(model_hash_bytes, #change!
                                                         min_buyin, 
                                                         max_buyin, 
                                                         reward,
@@ -323,7 +339,7 @@ class FLManager(Helper):
             txHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
             
             
-        receipt = self.w3.eth.waitForTransactionReceipt(txHash, 
+        receipt = self.w3.eth.wait_for_transaction_receipt(txHash,
                                                         timeout=600, 
                                                         poll_latency=1)
 
@@ -398,7 +414,7 @@ class FLChallenge(FLManager):
         l = len(txs)
         for i, txHash in enumerate(txs):
             self.bar(i, l)
-            receipt = self.w3.eth.waitForTransactionReceipt(txHash, 
+            receipt = self.w3.eth.wait_for_transaction_receipt(txHash,
                                                             timeout=600, 
                                                             poll_latency=1)
             
@@ -452,7 +468,7 @@ class FLChallenge(FLManager):
         l = len(txs)
         for i, txHash in enumerate(txs):
             self.bar(i, l)
-            receipt = self.w3.eth.waitForTransactionReceipt(txHash, 
+            receipt = self.w3.eth.wait_for_transaction_receipt(txHash,
                                                             timeout=600, 
                                                             poll_latency=1)
             
@@ -543,7 +559,7 @@ class FLChallenge(FLManager):
             if txHash == None:
                 continue
             self.bar(i, l)
-            receipt = self.w3.eth.waitForTransactionReceipt(txHash, 
+            receipt = self.w3.eth.wait_for_transaction_receipt(txHash,
                                                             timeout=600, 
                                                             poll_latency=1)
             
@@ -556,14 +572,18 @@ class FLChallenge(FLManager):
             user._roundrep.append(self.getRoundReputationOfUser(user.address))
         _print("                                                   ")
         print("\n-----------------------------------------------------------------------------------")
-        
-    def buildFeedbackBytes(self, a, v):
-        fbb = ""
-        for i in range(len(a)):
-            fbb += encode_single('address', a[i]).hex()[24:]
 
-        for i in range(len(v)):
-            fbb += encode_single('int256', v[i]).hex()
+    def buildFeedbackBytes(self, a, v):
+        fbb = ""  # keep as string
+
+        # Addresses: slice last 20 bytes to mimic original behavior
+        for addr in a:
+            encoded_addr = encode(["address"], [addr])  # 32 bytes
+            fbb += encoded_addr.hex()[24:]  # take last 20 bytes in hex
+
+        # Integers: full 32 bytes
+        for val in v:
+            fbb += encode(["int256"], [val]).hex()
 
         return fbb
 
@@ -591,7 +611,7 @@ class FLChallenge(FLManager):
             fbb = self.buildFeedbackBytes(addrs, votes)
             try:
                 if self.fork:
-                    txHash = self.w3.eth.sendTransaction({'to': self.modelAddress, 'from': user.address, 'data': fbb})
+                    txHash = self.w3.eth.send_transaction({'to': self.modelAddress, 'from': user.address, 'data': fbb})
                 else:          
                     nonce = self.w3.eth.get_transaction_count(user.address) 
                     hw = super().buildNonForkTx(user.address, nonce, self.modelAddress, 0, fbb)   
@@ -606,7 +626,7 @@ class FLChallenge(FLManager):
                     
                     self.w3.provider.make_request("evm_increaseTime", [WAIT_DELAY])
                     time.sleep(1)
-                    txHash = self.w3.eth.sendTransaction({'to': self.modelAddress, 
+                    txHash = self.w3.eth.send_transaction({'to': self.modelAddress,
                                                           'from': user.address, 
                                                           'data': fbb, 
                                                           "gas":500000})
@@ -619,7 +639,7 @@ class FLChallenge(FLManager):
         l = len(txs)
         for i, txHash in enumerate(txs):
             self.bar(i, l)
-            receipt = self.w3.eth.waitForTransactionReceipt(txHash, 
+            receipt = self.w3.eth.wait_for_transaction_receipt(txHash,
                                                             timeout=600, 
                                                             poll_latency=1)
             
@@ -661,7 +681,7 @@ class FLChallenge(FLManager):
             signed = self.w3.eth.account.signTransaction(cl, private_key=pk)
             txHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
             
-        receipt = self.w3.eth.waitForTransactionReceipt(txHash, 
+        receipt = self.w3.eth.wait_for_transaction_receipt(txHash,
                                                             timeout=600, 
                                                             poll_latency=1)          
 
@@ -685,10 +705,11 @@ class FLChallenge(FLManager):
                                                                          self.getGlobalReputationOfUser(acc.address)
                                                                          ))
                 continue
-           
-            reservation = Web3.solidityKeccak(['bytes32', 'uint256'], 
-                                              [acc.hashedModel, 
-                                               acc.secret]).hex()
+
+            # print("type: ", type(acc.hashedModel)) hexbytes!!
+            reservation = Web3.solidity_keccak(['bytes32', 'uint256', 'address'],
+                                              [acc.hashedModel,
+                                               acc.secret, acc.address])
             if self.fork:
                 tx = super().buildTx(acc.address, self.modelAddress, 0)
                 txHash = self.model.functions.registerSlot(reservation).transact(tx)
@@ -707,7 +728,7 @@ class FLChallenge(FLManager):
         l = len(txs)
         for i, txHash in enumerate(txs):
             self.bar(i, l)
-            receipt = self.w3.eth.waitForTransactionReceipt(txHash, 
+            receipt = self.w3.eth.wait_for_transaction_receipt(txHash,
                                                             timeout=600, 
                                                             poll_latency=1)
             
@@ -743,70 +764,77 @@ class FLChallenge(FLManager):
         l = len(txs)
         for i, txHash in enumerate(txs):
             self.bar(i, l)
-            receipt = self.w3.eth.waitForTransactionReceipt(txHash, 
+            receipt = self.w3.eth.wait_for_transaction_receipt(txHash,
                                                             timeout=600, 
                                                             poll_latency=1)
             
             self.gas_exit.append(receipt["gasUsed"])
             self.txHashes.append(("exit", receipt["transactionHash"].hex()))
         _print("-----------------------------------------------------------------------------------\n")
-    
 
-    
     def print_round_summary(self, receipt):
-        punishEvent   = self.model.events.Punishment()
-        rewardEvent   = self.model.events.Reward()
-        endRoundEvent = self.model.events.EndRound()
-        disqualiEvent = self.model.events.Disqualification()
-        
-        end = endRoundEvent.processReceipt(receipt)
-        rew = rewardEvent.processReceipt(receipt)
-        pun = punishEvent.processReceipt(receipt)
-        dis = disqualiEvent.processReceipt(receipt)
-        
-        if len(end) > 0:
-            for ev in end:
-                print(b("\nEND OF ROUND {}".format(ev.args.round+1)))
-                print(b("VALID VOTES:      {}".format(ev.args.validVotes)))
-                print(b("REWARD PER VOTE:  {:,.0f}".format(ev.args.rewardPerVote)))
-                print(b("TOTAL PUNISHMENT: {:,.0f}\n".format(ev.args.totalPunishment)))
+        # ✅ Decode all events directly via classmethods
+        end_events = self.model.events.EndRound.process_receipt(receipt)
+        reward_events = self.model.events.Reward.process_receipt(receipt)
+        punish_events = self.model.events.Punishment.process_receipt(receipt)
+        disqualify_events = self.model.events.Disqualification.process_receipt(receipt)
+
+        # 🟦 End of round summary
+        if end_events:
+            for ev in end_events:
+                args = ev["args"]
+                print(b(f"\nEND OF ROUND {args['round'] + 1}"))
+                print(b(f"VALID VOTES:      {args['validVotes']}"))
+                print(b(f"REWARD PER VOTE:  {args['rewardPerVote']:,}"))
+                print(b(f"TOTAL PUNISHMENT: {args['totalPunishment']:,}\n"))
             print("-----------------------------------------------------------------------------------\n")
-        if len(rew) > 0:
+
+        # 🟩 Rewarded users
+        if reward_events:
             print(b("REWARDED USERS"))
-            for ev in rew:
-                if ev.args.roundScore > 0:
-                    print(green("USER @ {}".format(ev.args.user)))
-                    print(green("ROUND SCORE:      {:,.0f}".format(ev.args.roundScore)))
-                    print(green("TOTAL REWARD:     {:,.0f}".format(ev.args.win)))
-                    print(green("NEW REPUTATION:   {:,.0f}\n".format(ev.args.newReputation)))
+            for ev in reward_events:
+                args = ev["args"]
+                if args["roundScore"] > 0:
+                    print(green(f"USER @ {args['user']}"))
+                    print(green(f"ROUND SCORE:      {args['roundScore']:,}"))
+                    print(green(f"TOTAL REWARD:     {args['win']:,}"))
+                    print(green(f"NEW REPUTATION:   {args['newReputation']:,}\n"))
             print("-----------------------------------------------------------------------------------\n")
-        if len(pun) > 0:
+
+        # 🟥 Punished users
+        if punish_events:
             print(b("PUNISHED USERS"))
-            for ev in pun:
-                self._punishments.append((self.pytorch_model.round-1, ev.args.loss))
-                print(red("USER @ {}".format(ev.args.victim)))
-                print(red("ROUND SCORE:      {:,.0f}".format(ev.args.roundScore)))
-                print(red("TOTAL LOSS:       {:,.0f}".format(ev.args.loss)))
-                print(red("NEW REPUTATION:   {:,.0f}\n".format(ev.args.newReputation)))
+            for ev in punish_events:
+                args = ev["args"]
+                self._punishments.append((self.pytorch_model.round - 1, args["loss"]))
+                print(red(f"USER @ {args['victim']}"))
+                print(red(f"ROUND SCORE:      {args['roundScore']:,}"))
+                print(red(f"TOTAL LOSS:       {args['loss']:,}"))
+                print(red(f"NEW REPUTATION:   {args['newReputation']:,}\n"))
             print("-----------------------------------------------------------------------------------\n")
-        if len(dis) > 0:
+
+        # 🟧 Disqualified users
+        if disqualify_events:
             print(b("DISQUALIFIED USERS"))
-            for ev in dis:
-                self._punishments.append((self.pytorch_model.round-1, ev.args.loss))
-                for user in self.pytorch_model.participants:
-                    if ev.args.victim == user.address:
+            for ev in disqualify_events:
+                args = ev["args"]
+                self._punishments.append((self.pytorch_model.round - 1, args["loss"]))
+
+                # Mark and remove disqualified users
+                for user in list(self.pytorch_model.participants):  # safe remove
+                    if args["victim"] == user.address:
                         user.disqualified = True
                         self.pytorch_model.disqualified.append(user)
                         self.pytorch_model.participants.remove(user)
-                print(red("USER @ {}".format(ev.args.victim)))
-                print(red("ROUND SCORE:      {:,.0f}".format(ev.args.roundScore)))
-                print(red("TOTAL LOSS:       {:,.0f}".format(ev.args.loss)))
-                print(red("NEW REPUTATION:   {:,.0f}\n".format(ev.args.newReputation)))
-            print("-----------------------------------------------------------------------------------\n")
-        print()
-    
 
-        
+                print(red(f"USER @ {args['victim']}"))
+                print(red(f"ROUND SCORE:      {args['roundScore']:,}"))
+                print(red(f"TOTAL LOSS:       {args['loss']:,}"))
+                print(red(f"NEW REPUTATION:   {args['newReputation']:,}\n"))
+            print("-----------------------------------------------------------------------------------\n")
+
+        print()
+
     def simulate(self, rounds):
         hashedWeights = []
         self.registerAllUsers()
