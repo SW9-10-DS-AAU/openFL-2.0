@@ -16,6 +16,9 @@ from torchvision import datasets, transforms
 from torchvision.datasets import CIFAR10, MNIST
 from torch.utils.data import DataLoader, random_split
 
+# Added
+RNG = np.random.default_rng()
+
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 bad_c  = "#d62728"
 free_c = "#9467bd"
@@ -43,10 +46,24 @@ class Participant:
         self.address = None
         self.privateKey = None
         self.isRegistered = False
-        self.collateral = _default_collateral + np.random.randint(0,int(_max_collateral-_default_collateral))
-        self.color = get_color(number_of_participants, self.attitude)         
+        # Old:  self.collateral = _default_collateral + np.random.randint(0,int(_max_collateral-_default_collateral))
+        # ---- collateral (handles huge ranges; avoids int32 cap) ----
+        lo = int(_default_collateral)
+        hi = int(_max_collateral)
+        if hi < lo:
+            raise ValueError(f"max_collateral ({hi}) must be >= default_collateral ({lo})")
+
+        diff = hi - lo
+        jitter = int(RNG.integers(0, np.int64(diff), dtype=np.int64)) if diff > 0 else 0
+        self.collateral = lo + jitter
+
+        # ---- secret (big nonce) ----
+        self.secret = int(RNG.integers(0, np.int64(10 ** 18), dtype=np.int64))
+        # self.secret = np.random.randint(0,int(1e18))
+
+        self.color = get_color(number_of_participants, self.attitude)
         self.roundRep = 0
-        self.secret = np.random.randint(0,int(1e18))
+
         self.disqualified = False
 
         # INTERFACE VARIABLES

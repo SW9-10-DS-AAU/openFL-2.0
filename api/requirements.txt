@@ -1,9 +1,21 @@
-torch == 2.4
-torchvision == 0.19
-numpy
-web3
-termcolor
-matplotlib
-eth-abi
-jupyter
-pandas
+# Core ML stack
+torch==1.13.1
+torchvision==0.14.1
+
+# Numerics / viz / data
+numpy==1.23.5
+pandas==1.5.3
+matplotlib==3.9.2
+termcolor==2.2.0
+
+# Ethereum
+web3==5.31.3
+eth-abi==2.2.0
+
+# Jupyter bits
+jupyter==1.0.0
+jupyterlab==3.6.1
+jupyter_server==2.3.0
+notebook==6.5.4
+traitlets==5.9.0
+ipython==8.12.0

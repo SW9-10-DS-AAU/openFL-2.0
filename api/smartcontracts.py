@@ -16,6 +16,9 @@ from subprocess import Popen, PIPE
 from eth_account import Account, messages
 from web3.exceptions import ContractLogicError
 from pytorch_model import gb, rb, b, green, red
+from pathlib import Path
+import json
+
 
 
 warnings.filterwarnings("ignore")
@@ -65,7 +68,7 @@ class Helper:
                 infura_url = inf.read().strip()
         if fork:
             if not manual_setup:
-                port = 8545
+                port = 7545
                 process = Popen(["lsof", "-i", ":{0}".format(port)], stdout=PIPE, stderr=PIPE)
                 stdout, stderr = process.communicate()
                 for process in str(stdout.decode("utf-8")).split("\n")[1:]:       
@@ -80,7 +83,7 @@ class Helper:
             time.sleep(1)
             try:
                 if fork:
-                    w3 = Web3(Web3.HTTPProvider("HTTP://127.0.0.1:8545"))
+                    w3 = Web3(Web3.HTTPProvider("HTTP://127.0.0.1:7545"))
                 else:
                     w3 = Web3(Web3.HTTPProvider(infura_url))
                 latestBlock = w3.eth.getBlock("latest").number
@@ -184,7 +187,7 @@ class Helper:
     
     def buildNonForkTx(self, addr, nonce, to=None, value=0, data=None):
         if data:
-            return {'chainId': 3,
+            return {'chainId': 1337,
                     'from': addr,
                     'to': to,
                     'gas': 10000000,
@@ -194,7 +197,7 @@ class Helper:
                     'value': value,
                     'data': data}
         if to:
-            return {'chainId': 3,
+            return {'chainId': 1337,
                     'from': addr,
                     'to': to,
                     'gas': 10000000,
@@ -203,7 +206,7 @@ class Helper:
                     'nonce':nonce,
                     'value': value}
         else:
-            return {'chainId': 3,
+            return {'chainId': 1337,
                     'from': addr,
                     'gas': 10000000,
                     'maxFeePerGas': w3.toWei('12', 'gwei'),
@@ -216,7 +219,13 @@ class Helper:
         p = "-" * (i+1)
         r = "." *((l-1)-i)
         _print("{}{}".format(p, r), end="\r")
-        
+
+    # New
+    def get_model_instance(self, address):
+        """Return a web3 contract instance bound to an existing OpenFLModel address."""
+        build = Path(__file__).resolve().parent.parent / "build"
+        abi = json.loads((build / "abi_model.txt").read_text(encoding="utf-8"))
+        return self.w3.eth.contract(address=Web3.toChecksumAddress(address), abi=abi)
     
     
 class FLManager(Helper):
@@ -424,11 +433,89 @@ class FLChallenge(FLManager):
 
     
     def usersProvideHashedWeights(self):
+        # txs = []
+        #
+        # def _to_bytes32(val):
+        #     # normalize acc.hashedModel to bytes32
+        #     if isinstance(val, (bytes, bytearray)):
+        #         return bytes(val) if len(val) == 32 else Web3.keccak(val)
+        #     if isinstance(val, str) and val.startswith("0x"):
+        #         b = Web3.toBytes(hexstr=val)
+        #         return b if len(b) == 32 else b  # if not 32, let keccak happen above instead
+        #     raise ValueError("acc.hashedModel must be bytes32 (bytes or 0x-hex).")
+        #
+        # for acc in self.pytorch_model.participants:
+        #     if acc.attitude == "inactive":
+        #         print("{:<17}   {} | {} | {:>25,.0f} WEI".format(
+        #             "Account inactive:", acc.address[0:16] + "...", "   ...   ",
+        #             self.getGlobalReputationOfUser(acc.address)
+        #         ))
+        #         continue
+        #
+        #     addr = Web3.toChecksumAddress(acc.address)
+        #
+        #     # --- normalize hashed weights + pull salt prepared in userRegisterSlot ---
+        #     hashed_weights = getattr(acc, "hashed_weights", None) or _to_bytes32(acc.hashedModel)
+        #     if len(hashed_weights) != 32:
+        #         raise ValueError("hashed_weights must be 32 bytes (bytes32).")
+        #     salt = int(getattr(acc, "salt", 0))
+        #     if salt == 0:
+        #         raise RuntimeError(f"No salt set for {addr}. Call userRegisterSlot() first.")
+        #
+        #     # --- sanity check against on-chain secret for this round (helps debug NKS) ---
+        #     r = self.model.functions.round().call()
+        #     expected = Web3.solidity_keccak(['bytes32', 'uint256', 'address'], [hashed_weights, salt, addr])
+        #     onchain = self.model.functions.secretOf(addr, r).call()
+        #     if onchain != expected:
+        #         raise RuntimeError(
+        #             f"Secret mismatch for {addr} (round {r}). "
+        #             f"onchain={onchain.hex()} expected={expected.hex()}"
+        #         )
+        #
+        #     # --- send provideHashedWeights(hashed_weights, salt) FROM SAME ADDRESS ---
+        #     if self.fork:
+        #         tx_hash = self.model.functions.provideHashedWeights(
+        #             hashed_weights, salt
+        #         ).transact({"from": addr})
+        #     else:
+        #         nonce = self.w3.eth.get_transaction_count(addr)
+        #         block_limit = self.w3.eth.get_block("latest")["gasLimit"]
+        #         gas_est = self.model.functions.provideHashedWeights(
+        #             hashed_weights, salt
+        #         ).estimate_gas({"from": addr})
+        #         tx = self.model.functions.provideHashedWeights(
+        #             hashed_weights, salt
+        #         ).build_transaction({
+        #             "from": addr,
+        #             "nonce": nonce,
+        #             "chainId": self.w3.eth.chain_id,
+        #             "gas": min(int(gas_est * 1.2), block_limit - 1),
+        #             "maxFeePerGas": self.w3.toWei("12", "gwei"),
+        #             "maxPriorityFeePerGas": self.w3.toWei("2", "gwei"),
+        #         })
+        #         signed = self.w3.eth.account.sign_transaction(tx, private_key=acc.privateKey)
+        #         tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
+        #
+        #     txs.append(tx_hash)
+        #     print("{:<17}   {} | {} | {:>25,.0f} WEI".format(
+        #         "Weights provided:", acc.address[0:16] + "...",
+        #                              tx_hash.hex()[0:6] + "...",
+        #         self.getGlobalReputationOfUser(acc.address)
+        #     ))
+        #
+        # # wait for all receipts
+        # l = len(txs)
+        # for i, tx_hash in enumerate(txs):
+        #     self.bar(i, l)
+        #     receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=600, poll_latency=1)
+        #     self.gas_weights.append(receipt["gasUsed"])
+        #     self.txHashes.append(("weights", receipt["transactionHash"].hex()))
+        # _print("-----------------------------------------------------------------------------------\n")
         txs = []
         for acc in self.pytorch_model.participants:
             if acc.attitude == "inactive":
-                print("{:<17}   {} | {} | {:>25,.0f} WEI".format("Account inactive:", 
-                                                                         acc.address[0:16] + "...", 
+                print("{:<17}   {} | {} | {:>25,.0f} WEI".format("Account inactive:",
+                                                                         acc.address[0:16] + "...",
                                                                          "   ...   ",
                                                                          self.getGlobalReputationOfUser(acc.address)
                                                                          ))
@@ -437,29 +524,29 @@ class FLChallenge(FLManager):
                 tx = super().buildTx(acc.address, self.modelAddress, 0)
                 txHash = self.model.functions.provideHashedWeights(acc.hashedModel, acc.secret).transact(tx)
 
-            else:          
-                nonce = self.w3.eth.get_transaction_count(acc.address) 
-                hw = super().buildNonForkTx(acc.address, nonce, self.modelAddress, 0)   
+            else:
+                nonce = self.w3.eth.get_transaction_count(acc.address)
+                hw = super().buildNonForkTx(acc.address, nonce, self.modelAddress, 0)
                 hw =  self.model.functions.provideHashedWeights(acc.hashedModel, acc.secret).buildTransaction(hw)
                 signed = self.w3.eth.account.signTransaction(hw, private_key=acc.privateKey)
                 txHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
             txs.append(txHash)
-            print("{:<17}   {} | {} | {:>25,.0f} WEI".format("Weights provided:", 
-                                                                         acc.address[0:16] + "...", 
+            print("{:<17}   {} | {} | {:>25,.0f} WEI".format("Weights provided:",
+                                                                         acc.address[0:16] + "...",
                                                                          txHash.hex()[0:6] + "...",
                                                                          self.getGlobalReputationOfUser(acc.address)
                                                                          ))
         l = len(txs)
         for i, txHash in enumerate(txs):
             self.bar(i, l)
-            receipt = self.w3.eth.waitForTransactionReceipt(txHash, 
-                                                            timeout=600, 
+            receipt = self.w3.eth.waitForTransactionReceipt(txHash,
+                                                            timeout=600,
                                                             poll_latency=1)
-            
+
             self.gas_weights.append(receipt["gasUsed"])
             self.txHashes.append(("weights", receipt["transactionHash"].hex()))
         _print("-----------------------------------------------------------------------------------\n")
-        
+
 
              
     def giveFeedback(self, feedbackGiver, target, score):
@@ -676,77 +763,155 @@ class FLChallenge(FLManager):
     
     
     def userRegisterSlot(self):
+        # txs = []
+        #
+        # for acc in self.pytorch_model.participants:
+        #     if acc.attitude == "inactive":
+        #         print("{:<17}   {} | {} | {:>25,.0f} WEI".format(
+        #             "Account inactive:",
+        #             acc.address[0:16] + "...",
+        #             "   ...   ",
+        #             self.getGlobalReputationOfUser(acc.address)
+        #         ))
+        #         continue
+        #
+        #     addr = Web3.toChecksumAddress(acc.address)
+        #
+        #     # --- normalize hashed weights to bytes32 ---
+        #     hw = acc.hashedModel
+        #     if isinstance(hw, (bytes, bytearray)):
+        #         hashed_weights = bytes(hw) if len(hw) == 32 else Web3.keccak(hw)
+        #     elif isinstance(hw, str) and hw.startswith("0x"):
+        #         hashed_weights = Web3.toBytes(hexstr=hw)  # must be 32 bytes
+        #     else:
+        #         raise ValueError("acc.hashedModel must be bytes32 (bytes or 0x-hex).")
+        #     if len(hashed_weights) != 32:
+        #         raise ValueError("hashed_weights must be 32 bytes (bytes32).")
+        #
+        #     acc.hashed_weights = hashed_weights  # save for provideHashedWeights()
+        #
+        #     # --- make/keep a salt (uint256) and compute secret (bytes32) ---
+        #     if not hasattr(acc, "salt") or acc.salt is None:
+        #         acc.salt = int.from_bytes(os.urandom(16), "big")  # any uint256 is fine
+        #     acc.salt = int(acc.salt)
+        #
+        #     # NOTE: use solidity_keccak with THREE types: bytes32, uint256, address
+        #     secret = Web3.solidityKeccak(
+        #         ['bytes32', 'uint256', 'address'],
+        #         [acc.hashed_weights, acc.salt, addr]
+        #     )
+        #     acc.secret = secret  # store for later debugging if needed
+        #
+        #     # --- send registerSlot(secret) FROM THIS SAME ADDRESS ---
+        #     if self.fork:
+        #         # unlocked accounts on Ganache → just pass "from"
+        #         tx = {"from": addr}
+        #         tx_hash = self.model.functions.registerSlot(secret).transact(tx)
+        #     else:
+        #         nonce = self.w3.eth.get_transaction_count(addr)
+        #         block_limit = self.w3.eth.get_block("latest")["gasLimit"]
+        #         tx = self.model.functions.registerSlot(secret).build_transaction({
+        #             "from": addr,
+        #             "nonce": nonce,
+        #             "chainId": self.w3.eth.chain_id,
+        #             "gas": min(300_000, block_limit - 1),
+        #             "maxFeePerGas": self.w3.toWei("12", "gwei"),
+        #             "maxPriorityFeePerGas": self.w3.toWei("2", "gwei"),
+        #         })
+        #         signed = self.w3.eth.account.sign_transaction(tx, private_key=acc.privateKey)
+        #         tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
+        #
+        #     txs.append(tx_hash)
+        #     print("{:<17}   {} | {} | {:>25,.0f} WEI".format(
+        #         "Slot registered:",
+        #         acc.address[0:16] + "...",
+        #         tx_hash.hex()[0:6] + "...",
+        #         self.getGlobalReputationOfUser(acc.address)
+        #     ))
+        #
+        # # wait for receipts
+        # l = len(txs)
+        # for i, tx_hash in enumerate(txs):
+        #     self.bar(i, l)
+        #     receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=600, poll_latency=1)
+        #     self.gas_slot.append(receipt["gasUsed"])
+        #     self.txHashes.append(("slot", receipt["transactionHash"].hex()))
+        # _print("-----------------------------------------------------------------------------------\n")
+        # return
+
+    # Old code
         txs = []
         for acc in self.pytorch_model.participants:
             if acc.attitude == "inactive":
-                print("{:<17}   {} | {} | {:>25,.0f} WEI".format("Account inactive:", 
-                                                                         acc.address[0:16] + "...", 
+                print("{:<17}   {} | {} | {:>25,.0f} WEI".format("Account inactive:",
+                                                                         acc.address[0:16] + "...",
                                                                          "   ...   ",
                                                                          self.getGlobalReputationOfUser(acc.address)
                                                                          ))
                 continue
-           
-            reservation = Web3.solidityKeccak(['bytes32', 'uint256'], 
-                                              [acc.hashedModel, 
-                                               acc.secret]).hex()
+
+            reservation = Web3.solidityKeccak(['bytes32', 'uint256', 'address'],
+                                              [acc.hashedModel,
+                                               acc.secret,
+                                               acc.address]).hex()
             if self.fork:
                 tx = super().buildTx(acc.address, self.modelAddress, 0)
                 txHash = self.model.functions.registerSlot(reservation).transact(tx)
-            else:          
-                nonce = w3.eth.get_transaction_count(acc.address) 
-                sl = super().buildNonForkTx(acc.address, nonce, self.modelAddress, 0)   
+            else:
+                nonce = w3.eth.get_transaction_count(acc.address)
+                sl = super().buildNonForkTx(acc.address, nonce, self.modelAddress, 0)
                 sl =  self.model.functions.registerSlot(reservation).buildTransaction(sl)
                 signed = w3.eth.account.signTransaction(sl, private_key=acc.privateKey)
                 txHash = w3.eth.sendRawTransaction(signed.rawTransaction)
             txs.append(txHash)
-            print("{:<17}   {} | {} | {:>25,.0f} WEI".format("Slot registered: ", 
-                                                                         acc.address[0:16] + "...", 
+            print("{:<17}   {} | {} | {:>25,.0f} WEI".format("Slot registered: ",
+                                                                         acc.address[0:16] + "...",
                                                                          txHash.hex()[0:6] + "...",
                                                                          self.getGlobalReputationOfUser(acc.address)
                                                                          ))
         l = len(txs)
         for i, txHash in enumerate(txs):
             self.bar(i, l)
-            receipt = self.w3.eth.waitForTransactionReceipt(txHash, 
-                                                            timeout=600, 
+            receipt = self.w3.eth.waitForTransactionReceipt(txHash,
+                                                            timeout=600,
                                                             poll_latency=1)
-            
+
             self.gas_slot.append(receipt["gasUsed"])
             self.txHashes.append(("slot", receipt["transactionHash"].hex()))
         _print("-----------------------------------------------------------------------------------\n")
-        return 
-    
-    
-    
+        return
+
+
+
     def exitSystem(self):
-      
+
         print(b(f"Terminating Model..."))
-       
+
         txs = []
         for acc in self.pytorch_model.participants:
-            
+
             if self.fork:
                 tx = super().buildTx(acc.address, self.modelAddress, 0)
                 txHash = self.model.functions.exitModel().transact(tx)
-            else:          
-                nonce = w3.eth.get_transaction_count(acc.address) 
-                ex = super().buildNonForkTx(acc.address, nonce, self.modelAddress, 0)   
+            else:
+                nonce = w3.eth.get_transaction_count(acc.address)
+                ex = super().buildNonForkTx(acc.address, nonce, self.modelAddress, 0)
                 ex =  self.model.functions.exitModel().buildTransaction(ex)
                 signed = w3.eth.account.signTransaction(ex, private_key=acc.privateKey)
                 txHash = w3.eth.sendRawTransaction(signed.rawTransaction)
             txs.append(txHash)
-            print("{:<17}   {} | {} | {:>27,.0f} WEI".format("Account exited:  ", 
-                                                             acc.address[0:16] + "...", 
+            print("{:<17}   {} | {} | {:>27,.0f} WEI".format("Account exited:  ",
+                                                             acc.address[0:16] + "...",
                                                              txHash.hex()[0:6] + "...",
                                                              self.w3.eth.get_balance(acc.address)
                                                              ))
         l = len(txs)
         for i, txHash in enumerate(txs):
             self.bar(i, l)
-            receipt = self.w3.eth.waitForTransactionReceipt(txHash, 
-                                                            timeout=600, 
+            receipt = self.w3.eth.waitForTransactionReceipt(txHash,
+                                                            timeout=600,
                                                             poll_latency=1)
-            
+
             self.gas_exit.append(receipt["gasUsed"])
             self.txHashes.append(("exit", receipt["transactionHash"].hex()))
         _print("-----------------------------------------------------------------------------------\n")
