@@ -5,7 +5,7 @@ import numpy as np
 from web3 import Web3
 import torch.nn as nn
 import torch.optim as optim
-DEVICE = torch.device("cpu")
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 from termcolor import colored
 from typing import Tuple, Dict
 import matplotlib.pyplot as plt
@@ -562,9 +562,11 @@ def red(text):
 
 def manipulate(model):
     sd=[]
-    for i in [val.cpu().numpy() for _, val in model.state_dict().items()]:
-        sd.append(i+random.randint(-100,100)/100)
-    
+    # for i in [val.cpu().numpy() for _, val in model.state_dict().items()]:
+    #     sd.append(i+random.randint(-100,100)/100)
+    for val in model.state_dict().values():
+        sd.append(val + (random.randint(-100, 100) / 100.0))
+
     params_dict = zip(model.state_dict().keys(), sd)
     return OrderedDict({k: torch.tensor(v) for k, v in params_dict})
 
