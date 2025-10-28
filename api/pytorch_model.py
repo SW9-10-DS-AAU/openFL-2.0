@@ -470,10 +470,10 @@ class PytorchModel:
                 elif user in feedbackGiver.cheater:
                     feedback_matrix[feedbackGiver.id][user.id] = -1
                 
-                elif accuracy > feedbackGiver.currentAcc - 0.07: # 7% Worse
+                elif accuracy > feedbackGiver.currentAcc - 0.07: # 7% Worse TODO: Evt tweak
                     feedback_matrix[feedbackGiver.id][user.id] = 1
                 
-                elif accuracy > feedbackGiver.currentAcc - 0.14: # 14% Worse
+                elif accuracy > feedbackGiver.currentAcc - 0.14: # 14% Worse TODO: Evt tweak
                     feedback_matrix[feedbackGiver.id][user.id] = 0
                     
                 else : # Even Worse
