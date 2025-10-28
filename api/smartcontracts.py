@@ -189,10 +189,10 @@ class Helper:
         return {
             'from': _from,
             'to': _to,
-            'value': _value
-            #,'gas': 300000,
-            #'maxFeePerGas': self.w3.toWei(250, 'gwei'),
-            #'maxPriorityFeePerGas': self.w3.toWei(5, 'gwei'),
+            'value': _value,
+            #'gas': 300000,
+            #'maxFeePerGas': self.w3.to_wei(250, 'gwei'),
+            #'maxPriorityFeePerGas': self.w3.to_wei(5, 'gwei'),
         }
     
     
