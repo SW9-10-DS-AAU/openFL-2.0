@@ -835,6 +835,18 @@ class FLChallenge(FLManager):
 
         print()
 
+    def contribution_score(self, _users):
+        print("START CONTRIBUTION SCORE\n")
+        merged_model = _users[0].model
+        for u in _users:
+            u.roundRep = 0
+            u.contribution_score = calc_contribution_score(u.previousModel, merged_model)
+
+        # TODO: Update global reputaion / stake WEI
+        # TODO: implement calc_contribution_score
+        # TODO: make fancy prints with colors
+        print("-----------------------------------------------------------------------------------\n")
+
     def simulate(self, rounds):
         hashedWeights = []
         self.registerAllUsers()
@@ -866,7 +878,7 @@ class FLChallenge(FLManager):
                    
             self.print_round_summary(receipt)
 
-            print(b(f"Round {self.pytorch_model.round-1} completed:"))
+            print(b(f"Round {self.pytorch_model.round-1} almost completed:"))
             
             for user in self.pytorch_model.participants+self.pytorch_model.disqualified:
                 user._globalrep.append(self.getGlobalReputationOfUser(user.address))
@@ -874,6 +886,8 @@ class FLChallenge(FLManager):
                 print(b("{}  {:>25,.0f} -> {:>25,.0f}".format(user.address[0:16]+"...",i,j)))
             
             print(b("\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"))
+
+            self.contribution_score([user for user in self.pytorch_model.participants if user.roundRep > 0])
             
         self.exitSystem()
             
@@ -988,4 +1002,7 @@ class FLChallenge(FLManager):
         # function to show the plot 
         plt.tight_layout(pad=1)
         plt.savefig(f"./pictures/{self.pytorch_model.DATASET}_simulation.pdf", bbox_inches='tight')
-        plt.show() 
+        plt.show()
+
+def calc_contribution_score(local_update, global_update):
+    return 1
