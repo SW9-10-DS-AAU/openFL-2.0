@@ -6,6 +6,7 @@ import time
 import signal
 import random
 import warnings
+import torch
 import numpy as np
 import pandas as pd
 from eth_abi import encode
@@ -838,13 +839,15 @@ class FLChallenge(FLManager):
     def contribution_score(self, _users):
         print("START CONTRIBUTION SCORE\n")
         merged_model = _users[0].model
+        num_mergers = len(_users)
         for u in _users:
             u.roundRep = 0
-            u.contribution_score = calc_contribution_score(u.previousModel, merged_model)
+            u.contribution_score = calc_contribution_score(u.previousModel, merged_model, num_mergers)
+            print(green(f"\nUSER @ {u.id}"))
+            print(green(f"CONTRIBUTION SCORE:      {u.contribution_score,}"))
 
         # TODO: Update global reputaion / stake WEI
-        # TODO: implement calc_contribution_score
-        # TODO: make fancy prints with colors
+        # TODO: make fancier prints
         print("-----------------------------------------------------------------------------------\n")
 
     def simulate(self, rounds):
@@ -1004,5 +1007,26 @@ class FLChallenge(FLManager):
         plt.savefig(f"./pictures/{self.pytorch_model.DATASET}_simulation.pdf", bbox_inches='tight')
         plt.show()
 
-def calc_contribution_score(local_update, global_update):
-    return 1
+def calc_contribution_score(local_model, global_model, num_mergers, eps=1e-12):
+    """
+    FedAvg-normalized dot product score so that sum = 1.
+
+    Args:
+        u: local model
+        U: global model found by FedAvg
+        num_clients: int, number of clients that merged this round
+        eps: float, small tolerance to avoid division by zero
+
+    Returns:
+        float, contribution score
+    """
+    local_update = torch.cat([p.data.view(-1) for p in local_model.parameters()])
+    global_update = torch.cat([p.data.view(-1) for p in global_model.parameters()])
+
+    norm_U_sq = torch.dot(global_update, global_update)
+
+    if norm_U_sq.abs() < eps: # Global update very small. To avoid division by 0
+        return 0.0
+    score = torch.dot(local_update, global_update) / (num_mergers * norm_U_sq)
+
+    return score.item()
