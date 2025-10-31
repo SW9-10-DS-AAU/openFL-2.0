@@ -1,26 +1,13 @@
 name: Python Build, Lint & Test
 
 on:
+  push:
+    branches: [develop]
   pull_request:
-    branches: [main]
-
+    branches: [develop]
 
 jobs:
-  enforce-source-branch:
-    runs-on: ubuntu-latest
-    outputs:
-      allowed: ${{ steps.check.outputs.allowed }}
-    steps:
-      - id: check
-        run: |
-          if [ "${{ github.head_ref }}" != "develop" ]; then
-            echo "PR must come from 'develop' branch!"
-            exit 1
-          fi
-          echo "allowed=true" >> $GITHUB_OUTPUT
-
-  build:
-    needs: enforce-source-branch
+  build-dev:
     runs-on: ubuntu-latest
 
     steps:
@@ -32,7 +19,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       # 3. Cache pip
       - name: Cache pip
@@ -54,12 +41,12 @@ jobs:
         run: |
           pip install black
           black --line-length 120 .
-          
+
       ## 6. Lint code with flake8
       #- name: Lint with flake8
       #  run: |
       #    pip install flake8
-      #    flake8 --max-line-length=120 .      
+      #    flake8 --max-line-length=120 .
 
       # 7. Build package if applicable
       - name: Build package
