@@ -23,3 +23,4 @@
 - Make sure you use Python3.10
 - Run ``pip install -r requirements.txt``
 - Go to mnist_ropsten_experiment.ipynb and run jupyter notebook
+
