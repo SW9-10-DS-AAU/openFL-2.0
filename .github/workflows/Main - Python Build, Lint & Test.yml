@@ -1,4 +1,4 @@
-name: Python Build, Lint & Test
+name: Main - Python Build, Lint & Test
 
 on:
   pull_request:
