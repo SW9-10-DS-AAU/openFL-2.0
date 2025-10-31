@@ -384,14 +384,13 @@ class PytorchModel:
         for u in _users:
             ids.append(u.id)
             client_models.append(u.model)
-            u.roundRep = 0
             print("Account {} participating in merge".format(u.address[0:16]+"..."))
             #print(test(c[1],self.test,DEVICE))
             
         
         global_dict = self.global_model.state_dict()
         for k in global_dict.keys():
-            global_dict[k] = torch.stack([client_models[i].state_dict()[k].float() for i in range(len(client_models))], 0).mean(0)
+            global_dict[k] = torch.stack([client_models[i].state_dict()[k].float() for i in range(len(client_models))], 0).mean(0) #FedAvg
         self.global_model.load_state_dict(global_dict)
         
         loss, accuracy = test(self.global_model,self.test,DEVICE)
@@ -401,8 +400,8 @@ class PytorchModel:
         print(b("Merged Model: Accuracy {:>3.0f} % | Loss {:>6,.2f}".format(accuracy*100,loss)))
 
         for u in self.participants:
-            u.previousModel = copy.deepcopy(u.model)
-            u.model.load_state_dict(self.global_model.state_dict())
+            u.previousModel = copy.deepcopy(u.model) #the model from this round
+            u.model.load_state_dict(self.global_model.state_dict()) #the global model
            
         print("-----------------------------------------------------------------------------------\n")
 
@@ -470,10 +469,10 @@ class PytorchModel:
                 elif user in feedbackGiver.cheater:
                     feedback_matrix[feedbackGiver.id][user.id] = -1
                 
-                elif accuracy > feedbackGiver.currentAcc - 0.07: # 7% Worse
+                elif accuracy > feedbackGiver.currentAcc - 0.07: # 7% Worse TODO: Evt tweak
                     feedback_matrix[feedbackGiver.id][user.id] = 1
                 
-                elif accuracy > feedbackGiver.currentAcc - 0.14: # 14% Worse
+                elif accuracy > feedbackGiver.currentAcc - 0.14: # 14% Worse TODO: Evt tweak
                     feedback_matrix[feedbackGiver.id][user.id] = 0
                     
                 else : # Even Worse

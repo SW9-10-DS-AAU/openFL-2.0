@@ -6,6 +6,7 @@ import time
 import signal
 import random
 import warnings
+import torch
 import numpy as np
 import pandas as pd
 from eth_abi import encode
@@ -189,10 +190,10 @@ class Helper:
         return {
             'from': _from,
             'to': _to,
-            'value': _value
-            #,'gas': 300000,
-            #'maxFeePerGas': self.w3.toWei(250, 'gwei'),
-            #'maxPriorityFeePerGas': self.w3.toWei(5, 'gwei'),
+            'value': _value,
+            #'gas': 300000,
+            #'maxFeePerGas': self.w3.to_wei(250, 'gwei'),
+            #'maxPriorityFeePerGas': self.w3.to_wei(5, 'gwei'),
         }
     
     
@@ -835,6 +836,20 @@ class FLChallenge(FLManager):
 
         print()
 
+    def contribution_score(self, _users):
+        print("START CONTRIBUTION SCORE\n")
+        merged_model = _users[0].model
+        num_mergers = len(_users)
+        for u in _users:
+            u.roundRep = 0
+            u.contribution_score = calc_contribution_score(u.previousModel, merged_model, num_mergers)
+            print(green(f"\nUSER @ {u.id}"))
+            print(green(f"CONTRIBUTION SCORE:      {u.contribution_score,}"))
+
+        # TODO: Update global reputaion / stake WEI
+        # TODO: make fancier prints
+        print("-----------------------------------------------------------------------------------\n")
+
     def simulate(self, rounds):
         hashedWeights = []
         self.registerAllUsers()
@@ -866,7 +881,7 @@ class FLChallenge(FLManager):
                    
             self.print_round_summary(receipt)
 
-            print(b(f"Round {self.pytorch_model.round-1} completed:"))
+            print(b(f"Round {self.pytorch_model.round-1} almost completed:"))
             
             for user in self.pytorch_model.participants+self.pytorch_model.disqualified:
                 user._globalrep.append(self.getGlobalReputationOfUser(user.address))
@@ -874,6 +889,8 @@ class FLChallenge(FLManager):
                 print(b("{}  {:>25,.0f} -> {:>25,.0f}".format(user.address[0:16]+"...",i,j)))
             
             print(b("\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"))
+
+            self.contribution_score([user for user in self.pytorch_model.participants if user.roundRep > 0])
             
         self.exitSystem()
             
@@ -988,4 +1005,28 @@ class FLChallenge(FLManager):
         # function to show the plot 
         plt.tight_layout(pad=1)
         plt.savefig(f"./pictures/{self.pytorch_model.DATASET}_simulation.pdf", bbox_inches='tight')
-        plt.show() 
+        plt.show()
+
+def calc_contribution_score(local_model, global_model, num_mergers, eps=1e-12):
+    """
+    FedAvg-normalized dot product score so that sum = 1.
+
+    Args:
+        u: local model
+        U: global model found by FedAvg
+        num_clients: int, number of clients that merged this round
+        eps: float, small tolerance to avoid division by zero
+
+    Returns:
+        float, contribution score
+    """
+    local_update = torch.cat([p.data.view(-1) for p in local_model.parameters()])
+    global_update = torch.cat([p.data.view(-1) for p in global_model.parameters()])
+
+    norm_U_sq = torch.dot(global_update, global_update)
+
+    if norm_U_sq.abs() < eps: # Global update very small. To avoid division by 0
+        return 0.0
+    score = torch.dot(local_update, global_update) / (num_mergers * norm_U_sq)
+
+    return score.item()
