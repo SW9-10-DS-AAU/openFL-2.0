@@ -47,6 +47,7 @@ contract OpenFLModel {
     mapping(address => mapping(address => bool)) public votedPositiveFor;
     mapping(address => mapping(uint8 =>bytes32)) public secretOf;
     mapping(address => mapping(uint8 => bytes32)) public weightsOf;
+    mapping(address => uint256) personalWeight;
 
     modifier onlyRegisteredUsers {
         require(isRegistered[msg.sender], "SNR");
@@ -225,7 +226,7 @@ contract OpenFLModel {
 
     function settle() internal {
         uint totalPunishment;
-        uint freeriderLock;       
+        uint freeriderLock;
 
         // First round users pay their anti-freerider fee
         for (uint i=0; i<participants.length; i++) { 
@@ -309,20 +310,37 @@ contract OpenFLModel {
         uint rewardPerVote = 0;
         if (votesPerRound > 0 && rewardLeft >= rewardPerRound) {
             rewardLeft -= rewardPerRound;
-            rewardPerVote = rewardPerRound / votesPerRound;
 
-            for (uint i=0; i < participants.length; i++) { 
-                if (isRegistered[participants[i]]) {
-                    if (whitelistedForRewards[participants[i]]){
-                        delete whitelistedForRewards[participants[i]];
-                        uint reward = nrOfVotesOfUser[participants[i]] * rewardPerVote;
-                        if (totalPunishment > 0) {
-                            uint weight = uint(nrOfVotesOfUser[participants[i]]*1e18)/uint(votesPerRound);
-                            reward +=  (totalPunishment * weight) / 1e18;   
-                        }    
-                        GlobalReputationOf[participants[i]] += reward;
-                        emit Reward(participants[i], RoundReputationOf[participants[i]], reward, GlobalReputationOf[participants[i]]);
-                    }   
+            uint reward = rewardPerRound;
+            if (totalPunishment > 0){
+                reward += totalPunishment;
+            }
+
+            uint sumOfWeights = 0;
+
+            // Compute weights
+            for (uint i=0; i < participants.length; i++) {
+                address user = participants[i];
+
+                if (isRegistered[user] && whitelistedForRewards[user]) {
+                    // contributionScoreOf[participants[i]] =  TODO: GET contrib score
+                    uint weight = nrOfVotesOfUser[user] * contributionScore[user]; //TODO: Contribution score cannot be float or negative?
+                    personalWeight[user] = weight;
+                    sumOfWeights += weight;
+                }
+            }
+            // Give rewards
+            for (uint i=0; i < participants.length; i++) {
+                address user = participants[i];
+
+                if (isRegistered[user] && whitelistedForRewards[user]) {
+                    uint personalReward = (reward * personalWeight[user]) / sumOfWeights;
+
+                    delete whitelistedForRewards[user];
+                    delete personalWeight[user];
+
+                    GlobalReputationOf[participants[i]] += personalReward;
+                    emit Reward(user, RoundReputationOf[user], personalReward, GlobalReputationOf[user]);
                 }
             }
         }
