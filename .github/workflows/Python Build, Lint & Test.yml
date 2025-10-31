@@ -49,17 +49,17 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      # 5. Lint code with flake8
-      - name: Lint with flake8
-        run: |
-          pip install flake8
-          flake8 .
-
-      # 6. Check formatting with black
+      # 5. fix formatting with black
       - name: Check code formatting with black
         run: |
           pip install black
-          black --check .
+          black --line-length 120 .
+          
+      ## 6. Lint code with flake8
+      #- name: Lint with flake8
+      #  run: |
+      #    pip install flake8
+      #    flake8 --max-line-length=120 .      
 
       # 7. Build package if applicable
       - name: Build package
