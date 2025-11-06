@@ -10,7 +10,8 @@ from web3.exceptions import ContractLogicError
 from openfl.contracts import FLManager
 from openfl.ml.pytorch_model import gb, rb, b, green, red
 from openfl.utils import printer, config
-from openfl.api.connection_helper import ConnectionHelper 
+from openfl.api.connection_helper import ConnectionHelper
+from decimal import Decimal
 
 class FLChallenge(FLManager):
     def __init__(self, manager, configs, pyTorchModel):
@@ -259,44 +260,12 @@ class FLChallenge(FLManager):
                 votee.roundRep = votee.roundRep + self.get_global_reputation_of_user(user.address) * int(vote)
             
             fbb = self.build_feedback_bytes(addrs, votes)
-            try:
-                if self.fork:
-                    txHash = self.w3.eth.send_transaction({'to': self.modelAddress, 'from': user.address, 'data': fbb})
-                else:          
-                    nonce = self.w3.eth.get_transaction_count(user.address) 
-                    hw = super().build_non_fork_tx(user.address, nonce, self.modelAddress, 0, fbb)   
-                    signed = self.w3.eth.account.signTransaction(hw, private_key=user.privateKey)
-                    txHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
-                txs.append(txHash)
+            txs.append(self.send_fallback_transaction_onchain(_to=self.modelAddress, _from=user.address, data=fbb,
+                                                              private_key=user.privateKey))
 
-            except ContractLogicError as e:
-                if "FRC" in str(e):
-                    input("Inactive users found - such users do not "\
-                              + "provide hashed weights.. \nGoing to forward time for 1 day\n")
-                    
-                    self.w3.provider.make_request("evm_increaseTime", [self.config.WAIT_DELAY])
-                    time.sleep(1)
-                    txHash = self.w3.eth.send_transaction({'to': self.modelAddress,
-                                                          'from': user.address, 
-                                                          'data': fbb, 
-                                                          "gas":500000})
-                    txs.append(txHash)
-                else:
-                    print(rb("Encountered error at feedback function"))
-                    raise 
-
-           
-        l = len(txs)
         for i, txHash in enumerate(txs):
-            printer.print_bar(i, l)
-            receipt = self.w3.eth.wait_for_transaction_receipt(txHash,
-                                                            timeout=600, 
-                                                            poll_latency=1)
-            
-            self.gas_feedback.append(receipt["gasUsed"])
-            self.txHashes.append(("feedback", receipt["transactionHash"].hex()))
+            self.log_receipt(i, txHash, len(txs), "feedback")
 
-        
         for user in self.pytorch_model.participants:
             user._roundrep.append(self.get_round_reputation_of_user(user.address))
             
@@ -306,8 +275,43 @@ class FLChallenge(FLManager):
         printer._print("                                                   ")
         print("\n-----------------------------------------------------------------------------------")
         
-        
-    
+    def log_receipt(self, i, tx_hash, len_txs, receipt_type: str):
+        self.bar(i, len_txs)
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash,
+                                                           timeout=600,
+                                                           poll_latency=1)
+
+        self.gas_feedback.append(receipt["gasUsed"])
+        self.txHashes.append((receipt_type, receipt["transactionHash"].hex()))
+
+
+    def send_fallback_transaction_onchain(self, _to, _from, data, private_key):
+        try:
+            if self.fork:
+                tx_hash = self.w3.eth.send_transaction({'to': _to, 'from': _from, 'data': data})
+            else:
+                nonce = self.w3.eth.get_transaction_count(_from)
+                hw = super().buildNonForkTx(_from, nonce, self.modelAddress, 0, data)
+                signed = self.w3.eth.account.signTransaction(hw, private_key=private_key)
+                tx_hash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
+
+        except ContractLogicError as e:
+            if "FRC" in str(e):
+                input("Inactive users found - such users do not " \
+                      + "provide hashed weights.. \nGoing to forward time for 1 day\n")
+
+                self.w3.provider.make_request("evm_increaseTime", [self.config.WAIT_DELAY])
+                time.sleep(1)
+                tx_hash = self.w3.eth.send_transaction({'to': _to,
+                                                       'from': _from,
+                                                       'data': data,
+                                                       "gas": 500000})
+            else:
+                print(rb("Encountered error at feedback function"))
+                raise
+        return tx_hash
+
+
     def close_round(self):
         if "inactive" in [acc.attitude for acc in self.pytorch_model.participants]:
                 input("Inactive users found - such users do not provide feedback.. " \
@@ -337,7 +341,8 @@ class FLChallenge(FLManager):
 
         self.txHashes.append(("close", receipt["transactionHash"].hex()))
         self.gas_close.append(receipt["gasUsed"])
-        assert(len(receipt.logs) > 0)
+        if len(receipt.logs) == 0:
+            print("⚠️ Warning: closeRound() emitted no logs")
         self.pytorch_model.round += 1
         self._reward_balance.append(self.get_reward_left())
         printer._print("\n-----------------------------------------------------------------------------------\n")
@@ -491,14 +496,34 @@ class FLChallenge(FLManager):
         print("START CONTRIBUTION SCORE\n")
         merged_model = _users[0].model
         num_mergers = len(_users)
+        txs = []
         for u in _users:
             u.roundRep = 0
-            u.contribution_score = self.calc_contribution_score(u.previousModel, merged_model, num_mergers)
-            print(green(f"\nUSER @ {u.id}"))
-            print(green(f"CONTRIBUTION SCORE:      {u.contribution_score,}"))
+            score = calc_contribution_score(u.previousModel, merged_model, num_mergers)
+            u.is_contrib_score_negative = True if score < 0 else False
+            u.contribution_score = score
 
-        # TODO: Update global reputaion / stake WEI
-        # TODO: make fancier prints
+            if self.fork:
+                tx = super().buildTx(u.address, self.modelAddress)
+                tx_hash = self.model.functions.submitContributionScore(abs(score),
+                                                                       u.is_contrib_score_negative).transact(tx)
+            else:  # TODO: Dobbeltjek at logic er rigtig her.
+                nonce = self.w3.eth.get_transaction_count(u.address)
+                cl = super().buildNonForkTx(u.address,
+                                            nonce,
+                                            self.modelAddress)
+                cl = self.model.functions.settleContributionScore(abs(score),
+                                                                  u.is_contrib_score_negative).buildTransaction(cl)
+                pk = u.private_key
+                signed = self.w3.eth.account.signTransaction(cl, private_key=pk)
+                tx_hash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
+            txs.append(tx_hash)
+
+            print(green(f"\nUSER @ {u.id}"))
+            print(green(f"{'CONTRIBUTION SCORE:':25} {u.contribution_score:}"))
+
+        for i, txHash in enumerate(txs):
+            self.log_receipt(i, txHash, len(txs), "contribution_score")
         print("-----------------------------------------------------------------------------------\n")
 
     def simulate(self, rounds):
@@ -526,23 +551,22 @@ class FLChallenge(FLManager):
             
             self.quick_feedback_round(feedback)
 
-            receipt = self.close_round()
-
             self.pytorch_model.the_merge([user for user in self.pytorch_model.participants if user.roundRep > 0])
-                   
-            self.print_round_summary(receipt)
-
-            print(b(f"Round {self.pytorch_model.round-1} almost completed:"))
-            
-            for user in self.pytorch_model.participants+self.pytorch_model.disqualified:
-                user._globalrep.append(self.get_global_reputation_of_user(user.address))
-                i, j = user._globalrep[-2:]
-                print(b("{}  {:>25,.0f} -> {:>25,.0f}".format(user.address[0:16]+"...",i,j)))
             
             print(b("\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"))
 
             self.contribution_score([user for user in self.pytorch_model.participants if user.roundRep > 0])
-            
+
+            receipt = self.closeRound()
+            print(b(f"Round {self.pytorch_model.round - 1} actually completed:"))
+            for user in self.pytorch_model.participants + self.pytorch_model.disqualified:
+                user._globalrep.append(self.getGlobalReputationOfUser(user.address))
+                i, j = user._globalrep[-2:]
+                print(b("{}  {:>25,.0f} -> {:>25,.0f}".format(user.address[0:16] + "...", i, j)))
+
+            self.print_round_summary(
+                receipt)  # TODO: Vi henter global reputation score heinde. Skal den sættes for hver user i python, eller henter vi den fra smart contracten næste gang den bruges alliegevel?
+
         self.exit_system()
             
             
@@ -659,26 +683,26 @@ class FLChallenge(FLManager):
         #plt.show()
         return plt
 
-    def calc_contribution_score(self, local_model, global_model, num_mergers, eps=1e-12):
-        """
-        FedAvg-normalized dot product score so that sum = 1.
+def calc_contribution_score(local_model, global_model, num_mergers, eps=1e-12) -> int:
+    """
+    FedAvg-normalized dot product score so that sum = 1.
 
-        Args:
-            u: local model
-            U: global model found by FedAvg
-            num_clients: int, number of clients that merged this round
-            eps: float, small tolerance to avoid division by zero
+    Args:
+        u: local model
+        U: global model found by FedAvg
+        num_clients: int, number of clients that merged this round
+        eps: float, small tolerance to avoid division by zero
 
-        Returns:
-            float, contribution score
-        """
-        local_update = torch.cat([p.data.view(-1) for p in local_model.parameters()])
-        global_update = torch.cat([p.data.view(-1) for p in global_model.parameters()])
+    Returns:
+        float, contribution score
+    """
+    local_update = torch.cat([p.data.view(-1) for p in local_model.parameters()])
+    global_update = torch.cat([p.data.view(-1) for p in global_model.parameters()])
 
-        norm_U_sq = torch.dot(global_update, global_update)
+    norm_U_sq = torch.dot(global_update, global_update)
 
-        if norm_U_sq.abs() < eps: # Global update very small. To avoid division by 0
-            return 0.0
-        score = torch.dot(local_update, global_update) / (num_mergers * norm_U_sq)
+    if norm_U_sq.abs() < eps:  # Global update very small. To avoid division by 0
+        return 0
+    score = torch.dot(local_update, global_update) / (num_mergers * norm_U_sq)
 
-        return score.item()
+    return int(Decimal(score.item()) * Decimal('1e18'))
