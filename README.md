@@ -23,7 +23,8 @@ The project runs with the .env.ganache .env file by default. If another .env is 
 ``ENV=<env_file_identifier>`` prefix. Providing no ENV prefix and providing ``ENV=ganache`` is therefore equivalent.
 
 In your Environment, you must have the following variables set:
-```RPC_URL="<RPC_URL from ganache or sepolia, including port>"
+```
+RPC_URL="<RPC_URL from ganache or sepolia, including port>"
 PRIVATE_KEYS="<Private keys from your accounts colon separated (for non-locally forked blockchain). If you have fork=true (using Ganache), there is no need to set private keys. Then just keep this variable empty>"
 ```
 
