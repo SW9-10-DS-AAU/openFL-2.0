@@ -7,7 +7,7 @@ install_solc("0.8.9")
 set_solc_version("0.8.9")
 
 # 2) Load sources
-root = Path(__file__).parents[1]
+root = Path(__file__).parent
 contracts_dir = root / "contracts"
 sources = {
     "OpenFLManager.sol": {"content": (contracts_dir / "OpenFLManager.sol").read_text(encoding="utf-8")},
@@ -19,15 +19,23 @@ compiled = compile_standard({
     "language": "Solidity",
     "sources": sources,
     "settings": {
+        "optimizer": {"enabled": True, "runs": 200},
         "outputSelection": {"*": {"*": ["abi","evm.bytecode.object"]}}
     }
 })
+
+bytecode = compiled["contracts"]["OpenFLModel.sol"]["OpenFLModel"]["evm"]["bytecode"]["object"]
+
+size_bytes = len(bytecode) // 2  # Each 2 hex chars = 1 byte
+size_kb = size_bytes / 1024
+
+print(f"Contract size: {size_bytes} bytes ({size_kb:.2f} KB)")
 
 # 4) Extract artifacts
 mgr = compiled["contracts"]["OpenFLManager.sol"]["OpenFLManager"]
 mdl = compiled["contracts"]["OpenFLModel.sol"]["OpenFLModel"]
 
-build = root / "artifacts" / "bytecode"
+build = root / "build"
 build.mkdir(exist_ok=True)
 
 # IMPORTANT: abi.txt should be JSON, because Python should json.load it later
