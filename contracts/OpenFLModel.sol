@@ -47,6 +47,10 @@ contract OpenFLModel {
     mapping(address => mapping(address => bool)) public votedPositiveFor;
     mapping(address => mapping(uint8 =>bytes32)) public secretOf;
     mapping(address => mapping(uint8 => bytes32)) public weightsOf;
+    mapping(address => uint256) personalWeight;
+    mapping(uint8 => mapping(address => uint256)) public contributionScore; // round => user => score
+    mapping(uint8 => mapping(address => bool)) public isContribScoreNegative;
+    mapping(uint8 => uint256) public nrOfContributionScores; // round => number of submissions
 
     modifier onlyRegisteredUsers {
         require(isRegistered[msg.sender], "SNR");
@@ -78,28 +82,37 @@ contract OpenFLModel {
     modifier hasNotYetProvidedWeights {
         require(weightsOf[msg.sender][round] == bytes32(0), "SAP");
         _;
-    }  
+    }
 
-    event FederatedLerningModelDeployed(uint initTS, 
-                                        uint max_collateral, 
-                                        uint min_collateral, 
-                                        uint total_reward, 
+    event FederatedLerningModelDeployed(uint initTS,
+                                        uint max_collateral,
+                                        uint min_collateral,
+                                        uint total_reward,
                                         uint8 min_rounds,
                                         uint freerider_fee);
 
-    event Registered(address user, 
+    event Registered(address user,
                      uint reputationValue,
-                     uint totalCollateral, 
+                     uint totalCollateral,
                      uint numberOfContributers);
 
-    event Feedback(address target, 
+    event Feedback(address target,
                    address user,
-                   uint globalReputation, 
+                   uint globalReputation,
                    int newRoundReputation);
 
-    event EndRound(uint8 round, 
+    // TODO: Optimer! behøver vi overhovedet at sende et event tilbage? Og hvis ja, så behøver det jo nok ikke nogen values.
+    event ContributionScoreSubmitted(
+        address indexed user,
+        uint256 contributionScore,
+        bool isContribScoreNegative
+    );
+
+
+
+    event EndRound(uint8 round,
                    uint8 validVotes,
-                   uint rewardPerVote, 
+                   uint rewardPerVote,
                    uint totalPunishment);
 
     event Punishment(address victim,
@@ -123,7 +136,7 @@ contract OpenFLModel {
                  uint newReputation);
 
 
-    constructor(bytes32 _modelHash, uint _min_collateral, uint _max_collateral, uint _reward, 
+    constructor(bytes32 _modelHash, uint _min_collateral, uint _max_collateral, uint _reward,
                 uint8 _min_rounds, uint8 _punishfactor, uint8 _freeriderPenalty) payable {
 
         // Initialize Contract
@@ -139,11 +152,11 @@ contract OpenFLModel {
         rewardPerRound = totalReward / min_rounds;
         rewardLeft = totalReward;
 
-        emit FederatedLerningModelDeployed(initTS, 
-                                           min_collateral, 
-                                           max_collateral, 
-                                           totalReward, 
-                                           min_rounds, 
+        emit FederatedLerningModelDeployed(initTS,
+                                           min_collateral,
+                                           max_collateral,
+                                           totalReward,
+                                           min_rounds,
                                            freeriderPenalty);
     }
 
@@ -194,27 +207,35 @@ contract OpenFLModel {
         }
         if (score == -1) {
             votedPositiveFor[msg.sender][target]=false;
-            RoundReputationOf[target] -= 1  * int(GlobalReputationOf[msg.sender]); 
+            RoundReputationOf[target] -= 1  * int(GlobalReputationOf[msg.sender]);
         }
         if (score == 0) {
             votedPositiveFor[msg.sender][target]=false;
         }
-        emit Feedback(target, msg.sender, GlobalReputationOf[msg.sender], RoundReputationOf[target]);  
+        emit Feedback(target, msg.sender, GlobalReputationOf[msg.sender], RoundReputationOf[target]);
     }
 
-    // Close feedback round
-    // @notice The round closes either if every registered participant provided feedback to everyone else 
-    // or if 1 day (86400 seconds) passed since model initialization
+    function submitContributionScore(uint256 score, bool is_negative) external {
+    require(isRegistered[msg.sender], "User not registered");
+    require(contributionScore[round][msg.sender] == 0, "Score already submitted");
+
+    contributionScore[round][msg.sender] = score;
+    isContribScoreNegative[round][msg.sender] = is_negative;
+    nrOfContributionScores[round] += 1;
+
+    emit ContributionScoreSubmitted(msg.sender, score, is_negative);
+}
+
     function closeRound() public returns(bool roundClosed){
         uint votes;
-        for (uint i=0; i<participants.length; i++) { 
+        for (uint i=0; i<participants.length; i++) {
             if (nrOfVotesOfUser[participants[i]] < nrOfParticipants - 1) {
                 if (block.timestamp > roundStart + ONE_DAY * 1) {
                     settle();
                     return true;
                 }
             } else {
-                votes += 1; 
+                votes += 1;
             }
         } if (votes == nrOfParticipants){
             settle();
@@ -225,10 +246,10 @@ contract OpenFLModel {
 
     function settle() internal {
         uint totalPunishment;
-        uint freeriderLock;       
+        uint freeriderLock;
 
         // First round users pay their anti-freerider fee
-        for (uint i=0; i<participants.length; i++) { 
+        for (uint i=0; i<participants.length; i++) {
             if (roundOfUser[participants[i]] == 1) {
                 GlobalReputationOf[participants[i]] = GlobalReputationOf[participants[i]] - freeriderPenalty;
                 freeriderLock += freeriderPenalty;
@@ -236,34 +257,34 @@ contract OpenFLModel {
         }
 
         // Punish malicious users
-        for (uint i=0; i<participants.length; i++) { 
+        for (uint i=0; i<participants.length; i++) {
             if (isRegistered[participants[i]]) {
                 if (RoundReputationOf[participants[i]] < 0) {
                     votesPerRound -= nrOfVotesOfUser[participants[i]];
                     if (GlobalReputationOf[participants[i]] > min_collateral / punishfactor) {
                         punishedAddresses.push(participants[i]);
-                        whitelistedForRewards[participants[i]] = false; 
+                        whitelistedForRewards[participants[i]] = false;
                         uint punishment = uint(GlobalReputationOf[participants[i]] / punishfactor);
                         GlobalReputationOf[participants[i]] = GlobalReputationOf[participants[i]] - punishment;
                         totalPunishment += punishment;
-                        emit Punishment(participants[i], 
-                                        RoundReputationOf[participants[i]], 
-                                        punishment, 
+                        emit Punishment(participants[i],
+                                        RoundReputationOf[participants[i]],
+                                        punishment,
                                         GlobalReputationOf[participants[i]]);
                     } else {
                         isRegistered[participants[i]] = false;
                         punishedAddresses.push(participants[i]);
                         whitelistedForRewards[participants[i]] = false;
                         totalPunishment += GlobalReputationOf[participants[i]];
-                        emit Disqualification(participants[i], 
-                                            RoundReputationOf[participants[i]], 
-                                            GlobalReputationOf[participants[i]], 
+                        emit Disqualification(participants[i],
+                                            RoundReputationOf[participants[i]],
+                                            GlobalReputationOf[participants[i]],
                                             0);
                         GlobalReputationOf[participants[i]] = 0;
                         nrOfParticipants -= 1;
                         delete participants[i];
                     }
-                    
+
                 } else {
                     whitelistedForRewards[participants[i]] = true;
                 }
@@ -271,24 +292,24 @@ contract OpenFLModel {
         }
 
         // Punish helpers of malicious users
-        for (uint i=0; i<participants.length; i++) { 
+        for (uint i=0; i<participants.length; i++) {
             if (isRegistered[participants[i]]) {
-                for (uint j=0; j < punishedAddresses.length; j++) { 
+                for (uint j=0; j < punishedAddresses.length; j++) {
                     if (votedPositiveFor[participants[i]][punishedAddresses[j]]) {
                         votedPositiveFor[participants[i]][punishedAddresses[j]]=false;
-                        votesPerRound -= nrOfVotesOfUser[participants[i]]; 
-                        whitelistedForRewards[participants[i]] = false; 
-                        emit PassivPunishment(participants[i], 
-                                            RoundReputationOf[participants[i]], 
-                                            0, 
-                                            GlobalReputationOf[participants[i]]);      
+                        votesPerRound -= nrOfVotesOfUser[participants[i]];
+                        whitelistedForRewards[participants[i]] = false;
+                        emit PassivPunishment(participants[i],
+                                            RoundReputationOf[participants[i]],
+                                            0,
+                                            GlobalReputationOf[participants[i]]);
                     }
                 }
             }
         }
 
         // Pay back freerider 1st round stake to good users
-        for (uint i=0; i < participants.length; i++) { 
+        for (uint i=0; i < participants.length; i++) {
             if (isRegistered[participants[i]]) {
                 if (roundOfUser[participants[i]] == 1) {
                     if (whitelistedForRewards[participants[i]]){
@@ -301,7 +322,6 @@ contract OpenFLModel {
                 }
             }
         }
-       
 
         // Devide reward between every user who provided (non-malicious) feedback
         // Pay back freeriderLock funds to good users
@@ -309,43 +329,68 @@ contract OpenFLModel {
         uint rewardPerVote = 0;
         if (votesPerRound > 0 && rewardLeft >= rewardPerRound) {
             rewardLeft -= rewardPerRound;
-            rewardPerVote = rewardPerRound / votesPerRound;
 
-            for (uint i=0; i < participants.length; i++) { 
-                if (isRegistered[participants[i]]) {
-                    if (whitelistedForRewards[participants[i]]){
-                        delete whitelistedForRewards[participants[i]];
-                        uint reward = nrOfVotesOfUser[participants[i]] * rewardPerVote;
-                        if (totalPunishment > 0) {
-                            uint weight = uint(nrOfVotesOfUser[participants[i]]*1e18)/uint(votesPerRound);
-                            reward +=  (totalPunishment * weight) / 1e18;   
-                        }    
-                        GlobalReputationOf[participants[i]] += reward;
-                        emit Reward(participants[i], RoundReputationOf[participants[i]], reward, GlobalReputationOf[participants[i]]);
-                    }   
+            uint reward = rewardPerRound;
+            if (totalPunishment > 0){
+                reward += totalPunishment;
+            }
+
+            uint sumOfWeights = 0;
+
+            // Compute weights
+            for (uint i=0; i < participants.length; i++) {
+                address user = participants[i];
+
+                if (isRegistered[user] && whitelistedForRewards[user]) {
+                    uint256 weight = nrOfVotesOfUser[user] * contributionScore[round][user];
+                    personalWeight[user] = weight;
+
+                    if (isContribScoreNegative[round][user]) {
+                        sumOfWeights -= weight;
+                    } else {
+                        sumOfWeights += weight;
+                    }
+                }
+            }
+            // Give rewards
+            for (uint i=0; i < participants.length; i++) {
+                address user = participants[i];
+
+                if (isRegistered[user] && whitelistedForRewards[user]) {
+                    uint personalReward = (reward * personalWeight[user]) / sumOfWeights;
+
+                    delete whitelistedForRewards[user];
+                    delete personalWeight[user];
+
+                    if (isContribScoreNegative[round][user]) {
+                        GlobalReputationOf[participants[i]] -= personalReward;
+                    } else {
+                        GlobalReputationOf[participants[i]] += personalReward;
+                    }
+                     // TODO: maybe give negative reputation
+                    emit Reward(user, RoundReputationOf[user], personalReward, GlobalReputationOf[user]); // TODO: we updated win, but do we need to update roundScore?
                 }
             }
         }
-
         emit EndRound(round, votesPerRound, rewardPerVote, totalPunishment);
 
         // Reset variables
-        for (uint i=0; i<participants.length; i++) { 
+        for (uint i=0; i<participants.length; i++) {
             if (isRegistered[participants[i]]) {
-                nrOfVotesOfUser[participants[i]] = 0;     
+                nrOfVotesOfUser[participants[i]] = 0;
                 RoundReputationOf[participants[i]] = 0;
                 roundOfUser[participants[i]] += 1;
                 for (uint j=0; j<participants.length; j++) {
                     delete hasVoted[participants[i]][participants[j]];
                 }
-            }        
+            }
         }
 
         round += 1;
-        votesPerRound = 0; 
+        votesPerRound = 0;
         nrOfProvidedHashedWeights = 0;
-        delete punishedAddresses;  
-        roundStart = block.timestamp;       
+        delete punishedAddresses;
+        roundStart = block.timestamp;
     }
 
     // Exit contract
