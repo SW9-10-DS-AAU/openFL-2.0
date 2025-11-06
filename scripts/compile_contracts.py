@@ -28,7 +28,7 @@ mgr = compiled["contracts"]["OpenFLManager.sol"]["OpenFLManager"]
 mdl = compiled["contracts"]["OpenFLModel.sol"]["OpenFLModel"]
 
 build = root / "artifacts" / "bytecode"
-build.mkdir(exist_ok=True)
+build.mkdir(parents=True, exist_ok=True)
 
 # IMPORTANT: abi.txt should be JSON, because Python should json.load it later
 (Path(build / "abi.txt")).write_text(json.dumps(mgr["abi"], separators=(",",":")), encoding="utf-8")
