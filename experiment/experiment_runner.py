@@ -1,0 +1,143 @@
+import os
+from pathlib import Path
+
+
+from openfl.ml import pytorch_model as PM
+from openfl.contracts import fl_manager as Manager, fl_challenge as Challenge
+from openfl.utils import require_env_var
+
+
+def run_experiment(dataset_name, experiment_config):
+  RPC_ENDPOINT = require_env_var("RPC_URL")
+    
+
+# Only for the real-net simulation
+# In order to use a non-locally forked blockchain, 
+# private keys are required to unlock accounts
+  if experiment_config.fork == False:
+      from web3 import Web3
+      w3 = Web3(Web3.HTTPProvider(RPC_ENDPOINT))
+      PRIVKEYS = []
+      privKeys = require_env_var("PRIVATE_KEYS").split(':')
+      for f in privKeys:
+          PRIVKEYS.append(f)
+
+      PRIVKEYS = [w3.eth.account.privateKeyToAccount(i) for i in PRIVKEYS]
+  else:
+      PRIVKEYS = None
+
+  pytorch_model = PM.PytorchModel(dataset_name, 
+                              experiment_config.number_of_good_contributors, 
+                              experiment_config.number_of_contributors, 
+                              experiment_config.epochs, 
+                              experiment_config.batch_size, 
+                              experiment_config.standard_buy_in,
+                              experiment_config.max_buy_in)
+
+  for i in range(experiment_config.number_of_bad_contributors):
+      pytorch_model.add_participant("bad",3)
+
+  for i in range(experiment_config.number_of_freerider_contributors):
+      pytorch_model.add_participant("freerider",1)
+      
+  for i in range(experiment_config.number_of_inactive_contributors):
+      pytorch_model.add_participant("inactive",1)
+
+  manager = Manager.FLManager(pytorch_model, True).init(experiment_config.number_of_good_contributors, 
+                                              experiment_config.number_of_bad_contributors,
+                                              experiment_config.number_of_freerider_contributors,
+                                              experiment_config.number_of_inactive_contributors,
+                                              experiment_config.minimum_rounds,
+                                              RPC_ENDPOINT,
+                                              experiment_config.fork,
+                                              PRIVKEYS)
+  manager.build_contract()
+
+  configs = manager.deploy_challenge_contract(experiment_config.min_buy_in,
+                                          experiment_config.max_buy_in,
+                                          experiment_config.reward, 
+                                          experiment_config.minimum_rounds,
+                                          experiment_config.punish_factor,
+                                          experiment_config.first_round_fee)
+
+  model = Challenge.FLChallenge(manager, 
+                      configs,
+                      pytorch_model)
+
+
+  model.simulate(rounds=experiment_config.minimum_rounds)
+
+  return Experiment(model, manager)
+
+
+def visualizeModel(model):
+  model.visualize_simulation("experiment/figures")
+
+
+
+def print_transactions(experiment):
+  model = experiment.model
+  print("{:<10} - {:^64} -    Gas Used - {}".format("Function", "Transaction Hash", "Success"))
+  print("------------------------------------------------------------------------------------------")
+  for f, txhash in model.txHashes:
+      r = model.w3.eth.wait_for_transaction_receipt(txhash)
+      if r["status"] == 1:
+          success = "✅"
+      else:
+          success = "FAIL"
+      
+      gas = r["gasUsed"]
+      print("{:<10} - {} - {:>9,.0f} -   {}".format(f, txhash, gas, success))
+
+
+def print_latex(experiment):
+  model = experiment.model
+  manager = experiment.manager
+  print("\\renewcommand{\\arraystretch}{1.3}")
+  print("\\begin{center}")
+  print("\\begin{tabular}{ c|c }")
+
+  print("Contract & Address (Ropsten Testnet) \\\\")
+  print("\\hline")
+  print("Ma-1 & {} \\ ".format(manager.manager.address))
+  print("Ch-1 & {} \\ ".format(model.model.address))
+  for i, p in enumerate(model.pytorch_model.participants[:-1] + \
+                            model.pytorch_model.disqualified + \
+                            [model.pytorch_model.participants[-1]]):
+      print("P-{}  & {} \\ ".format(i+1, p.address))
+
+  print("\\end{tabular}")
+  print("\\end{center}")
+
+
+def table_with_gas_and_transactions_latex(experiment):
+  model = experiment.model
+  manager = experiment.manager
+  reg = model.gas_register, "register"
+  fed = model.gas_feedback, "feedback"
+  clo = model.gas_close, "settle round"
+  slo = model.gas_slot, "reserve slot"
+  wei = model.gas_weights, "provide weights**"
+  dep = manager.gas_deploy, "deployment"
+  dep = manager.gas_deploy, "deployment"
+  ext = model.gas_exit, "exit"
+
+  tot  = 0
+  tot2 = 0
+
+  print("\\begin{tabular}{ |c|c|c| }\n\\hline\nFunction & Gas Amount & Gas Costs*\\\\ \n\\hline")
+  for i, f in [reg,slo,wei,fed,clo]:
+      print("{} & {:,.0f} & {:.5f} ETH \\\\".format(f, sum(i)/len(i), sum(i)/len(i) * 20e9 / 1e18 ))
+      tot += sum(i)/len(i)
+      if i != clo[0]:
+              tot2 += sum(i)/len(i)
+          
+  print("\\hline\n\\hline")
+  print("complete round & {:,.0f} & {:.5f} \\ ".format(tot, tot * 20e9 / 1e18))
+  print("\\hline\n\\end{tabular}")
+    
+
+class Experiment:
+  def __init__(self, model, manager):
+    self.model = model
+    self.manager = manager

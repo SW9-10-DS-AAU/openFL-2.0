@@ -1,0 +1,5 @@
+printing:
+  ONLY_PRINT_ROUND_SUMMARY: False
+  ONLY_PRINT_ROUND_SUMMAR: True
+contracts:
+  WAIT_DELAY: 172800
