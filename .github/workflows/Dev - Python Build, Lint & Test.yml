@@ -71,11 +71,7 @@ jobs:
       - name: Import check
         run: python -c "import sys; import os; print('Python OK')"
 
-      # 8) Run tests (only if present)
+      # 9. Run tests if folder exists
       - name: Run tests
         run: |
-          if [ -f pytest.ini ] || [ -d tests ]; then pytest; else echo "No tests found"; fi
-      # # 9. Run tests if folder exists
-      # - name: Run tests
-      #   run: |
-      #     if [ -f pytest.ini ] || [ -d tests ]; then pip install pytest && pytest; fi
+          if [ -f pytest.ini ] || [ -d tests ]; then pip install pytest && pytest; fi
