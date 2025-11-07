@@ -373,7 +373,7 @@ contract OpenFLModel {
                 }
             }
         }
-        emit EndRound(round, votesPerRound, rewardPerVote, totalPunishment);
+        emit EndRound(round, votesPerRound, rewardPerVote, totalPunishment); // TODO: emit noget mere relevant end rewardspervote
 
         // Reset variables
         for (uint i=0; i<participants.length; i++) {
