@@ -276,7 +276,7 @@ class FLChallenge(FLManager):
         print("\n-----------------------------------------------------------------------------------")
         
     def log_receipt(self, i, tx_hash, len_txs, receipt_type: str):
-        self.bar(i, len_txs)
+        printer.print_bar(i, len_txs)
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash,
                                                            timeout=600,
                                                            poll_latency=1)
@@ -504,7 +504,7 @@ class FLChallenge(FLManager):
             u.contribution_score = score
 
             if self.fork:
-                tx = super().buildTx(u.address, self.modelAddress)
+                tx = super().build_tx(u.address, self.modelAddress)
                 tx_hash = self.model.functions.submitContributionScore(abs(score),
                                                                        u.is_contrib_score_negative).transact(tx)
             else:  # TODO: Dobbeltjek at logic er rigtig her.
@@ -557,10 +557,10 @@ class FLChallenge(FLManager):
 
             self.contribution_score([user for user in self.pytorch_model.participants if user.roundRep > 0])
 
-            receipt = self.closeRound()
+            receipt = self.close_round()
             print(b(f"Round {self.pytorch_model.round - 1} actually completed:"))
             for user in self.pytorch_model.participants + self.pytorch_model.disqualified:
-                user._globalrep.append(self.getGlobalReputationOfUser(user.address))
+                user._globalrep.append(self.get_global_reputation_of_user(user.address))
                 i, j = user._globalrep[-2:]
                 print(b("{}  {:>25,.0f} -> {:>25,.0f}".format(user.address[0:16] + "...", i, j)))
 
