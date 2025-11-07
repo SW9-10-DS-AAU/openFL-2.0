@@ -7,7 +7,7 @@ install_solc("0.8.9")
 set_solc_version("0.8.9")
 
 # 2) Load sources
-root = Path(__file__).parent
+root = Path(__file__).parents[1]
 contracts_dir = root / "contracts"
 sources = {
     "OpenFLManager.sol": {"content": (contracts_dir / "OpenFLManager.sol").read_text(encoding="utf-8")},
@@ -35,8 +35,8 @@ print(f"Contract size: {size_bytes} bytes ({size_kb:.2f} KB)")
 mgr = compiled["contracts"]["OpenFLManager.sol"]["OpenFLManager"]
 mdl = compiled["contracts"]["OpenFLModel.sol"]["OpenFLModel"]
 
-build = root / "build"
-build.mkdir(exist_ok=True)
+build = root / "artifacts" / "bytecode"
+build.mkdir(parents=True, exist_ok=True)
 
 # IMPORTANT: abi.txt should be JSON, because Python should json.load it later
 (Path(build / "abi.txt")).write_text(json.dumps(mgr["abi"], separators=(",",":")), encoding="utf-8")
