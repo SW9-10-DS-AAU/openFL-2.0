@@ -572,7 +572,7 @@ class FLChallenge(FLManager):
             
     
     def visualize_simulation(self, output_folder_path):
-        
+        os.makedirs(output_folder_path, exist_ok=True)  # ensure folder exists
         accuracy = [0] + self.pytorch_model.accuracy
         loss = [self.pytorch_model.loss[0]] + self.pytorch_model.loss
 
@@ -677,7 +677,8 @@ class FLChallenge(FLManager):
         # giving a title to my graph 
         #axs[1].set_title(f'users={participants}; malicious={malicious_users}; copycat={sneaky_freerider}', fontsize=10) 
 
-        # function to show the plot 
+        # function to show the plot
+        print(output_folder_path)
         plt.tight_layout(pad=1)
         plt.savefig(os.path.join(output_folder_path, f"{self.pytorch_model.DATASET}_simulation.pdf"), bbox_inches='tight')
         #plt.show()
