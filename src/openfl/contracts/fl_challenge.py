@@ -429,12 +429,44 @@ class FLChallenge(FLManager):
             self.txHashes.append(("exit", receipt["transactionHash"].hex()))
         printer._print("-----------------------------------------------------------------------------------\n")
 
+    def get_events(self, w3, contract, receipt, event_names):
+        """
+        Returns decoded events without ABI mismatch warnings.
+
+        Args:
+            w3: Web3 instance
+            contract: Contract instance
+            receipt: transaction receipt
+            event_names: list of event names to extract
+
+        Returns:
+            dict: {eventName: [decodedEvents...]}
+        """
+        results = {name: [] for name in event_names}
+
+        for name in event_names:
+            event_abi = getattr(contract.events, name)().abi
+            event_signature = w3.keccak(
+                text=f"{name}(" + ",".join(i["type"] for i in event_abi["inputs"]) + ")").hex()
+
+            for log in receipt.logs:
+                if log["topics"][0].hex() == event_signature:
+                    decoded = getattr(contract.events, name)().process_log(log)
+                    results[name].append(decoded)
+
+        return results
     def print_round_summary(self, receipt):
-        # ✅ Decode all events directly via classmethods
-        end_events = self.model.events.EndRound.process_receipt(receipt)
-        reward_events = self.model.events.Reward.process_receipt(receipt)
-        punish_events = self.model.events.Punishment.process_receipt(receipt)
-        disqualify_events = self.model.events.Disqualification.process_receipt(receipt)
+        events = self.get_events(
+            w3=self.w3,
+            contract=self.model,
+            receipt=receipt,
+            event_names=["EndRound", "Reward", "Punishment", "Disqualification"]
+        )
+
+        end_events = events["EndRound"]
+        reward_events = events["Reward"]
+        punish_events = events["Punishment"]
+        disqualify_events = events["Disqualification"]
 
         # 🟦 End of round summary
         if end_events:
@@ -526,6 +558,7 @@ class FLChallenge(FLManager):
             self.log_receipt(i, txHash, len(txs), "contribution_score")
         print("-----------------------------------------------------------------------------------\n")
 
+
     def simulate(self, rounds):
         hashedWeights = []
         self.register_all_users()
@@ -564,8 +597,7 @@ class FLChallenge(FLManager):
                 i, j = user._globalrep[-2:]
                 print(b("{}  {:>25,.0f} -> {:>25,.0f}".format(user.address[0:16] + "...", i, j)))
 
-            self.print_round_summary(
-                receipt)  # TODO: Vi henter global reputation score heinde. Skal den sættes for hver user i python, eller henter vi den fra smart contracten næste gang den bruges alliegevel?
+            self.print_round_summary(receipt)  # TODO: Vi henter global reputation score heinde. Skal den sættes for hver user i python, eller henter vi den fra smart contracten næste gang den bruges alliegevel?
 
         self.exit_system()
             
