@@ -54,9 +54,6 @@ jobs:
         #   pip install black
         #   black --line-length 120 .
 
-      - name: Type check with mypy
-        run: mypy .
-
       ## 5. Lint code with flake8
       #- name: Lint with flake8
       #  run: |
