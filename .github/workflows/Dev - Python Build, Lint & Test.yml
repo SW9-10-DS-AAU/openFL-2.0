@@ -43,10 +43,13 @@ jobs:
           # Tools needed to build distributions
           python -m pip install --upgrade build setuptools wheel
           pip install -e ".[dev]"
+          pip install 'black[jupyter]'
 
       # 4. fix formatting with black
       - name: Check code formatting with black
-        run: black --line-length 120 --check .
+        run: |
+          pip install black
+          black --line-length 120 .
         # run: |
         #   pip install black
         #   black --line-length 120 .
