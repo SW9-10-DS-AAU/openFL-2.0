@@ -555,7 +555,7 @@ class FLChallenge(FLManager):
             print(green(f"{'CONTRIBUTION SCORE:':25} {u.contribution_score:}"))
 
         for i, txHash in enumerate(txs):
-            self.log_receipt(i, txHash, len(txs), "contribution_score")
+            self.log_receipt(i, txHash, len(txs), "con_score")
         print("-----------------------------------------------------------------------------------\n")
 
 
