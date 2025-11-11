@@ -46,10 +46,10 @@ jobs:
           pip install 'black[jupyter]'
 
       # 4. fix formatting with black
-      - name: Check code formatting with black
-        run: |
-          pip install black
-          black --line-length 120 .
+      # - name: Check code formatting with black
+      #   run: |
+      #     pip install black
+      #     black --line-length 120 .
         # run: |
         #   pip install black
         #   black --line-length 120 .
