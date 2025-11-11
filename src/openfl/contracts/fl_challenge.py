@@ -474,7 +474,7 @@ class FLChallenge(FLManager):
                 args = ev["args"]
                 print(b(f"\nEND OF ROUND {args['round'] + 1}"))
                 print(b(f"VALID VOTES:      {args['validVotes']}"))
-                print(b(f"REWARD PER VOTE:  {args['rewardPerVote']:,}"))
+                print(b(f"SUM OF WEIGHTS:  {args['sumOfWeights']:,}"))
                 print(b(f"TOTAL PUNISHMENT: {args['totalPunishment']:,}\n"))
             print("-----------------------------------------------------------------------------------\n")
 
@@ -539,7 +539,7 @@ class FLChallenge(FLManager):
                 tx = super().build_tx(u.address, self.modelAddress)
                 tx_hash = self.model.functions.submitContributionScore(abs(score),
                                                                        u.is_contrib_score_negative).transact(tx)
-            else:  # TODO: Dobbeltjek at logic er rigtig her.
+            else:
                 nonce = self.w3.eth.get_transaction_count(u.address)
                 cl = super().buildNonForkTx(u.address,
                                             nonce,
@@ -597,7 +597,7 @@ class FLChallenge(FLManager):
                 i, j = user._globalrep[-2:]
                 print(b("{}  {:>25,.0f} -> {:>25,.0f}".format(user.address[0:16] + "...", i, j)))
 
-            self.print_round_summary(receipt)  # TODO: Vi henter global reputation score heinde. Skal den sættes for hver user i python, eller henter vi den fra smart contracten næste gang den bruges alliegevel?
+            self.print_round_summary(receipt)
 
         self.exit_system()
             
@@ -734,7 +734,7 @@ def calc_contribution_score(local_model, global_model, num_mergers, eps=1e-12) -
 
     norm_U_sq = torch.dot(global_update, global_update)
 
-    if norm_U_sq.abs() < eps:  # Global update very small. To avoid division by 0
+    if norm_U_sq.abs() < eps:
         return 0
     score = torch.dot(local_update, global_update) / (num_mergers * norm_U_sq)
 
