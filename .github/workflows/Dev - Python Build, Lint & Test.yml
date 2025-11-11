@@ -42,7 +42,7 @@ jobs:
           python -m pip install --upgrade pip
           # Tools needed to build distributions
           python -m pip install --upgrade build setuptools wheel
-          pip install -e ".[dev]"
+          pip install -e ".[ci]"
           pip install 'black[jupyter]'
 
       # 4. fix formatting with black
