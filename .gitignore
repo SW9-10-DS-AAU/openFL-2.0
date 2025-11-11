@@ -8,6 +8,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+.idea/**
 build/
 api/build/
 develop-eggs/
@@ -136,14 +137,16 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env*
 .envrc
 .venv
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+!.env/
 .env/*
+!.env/.env.ganache.example
 
 #Bytecode
 artifacts/bytecode/**
