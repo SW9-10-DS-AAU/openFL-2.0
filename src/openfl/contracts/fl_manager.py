@@ -40,6 +40,8 @@ class FLManager(ConnectionHelper):
     
     # Deploy contract and initiate proxy
     def build_contract(self):
+        manager_abi = self.manager.abi
+
         if self.fork:
             genesisHash = self.manager.constructor().transact()  # Build Contract
         else:
@@ -51,15 +53,23 @@ class FLManager(ConnectionHelper):
             genesisHash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
             
         receipt = self.w3.eth.wait_for_transaction_receipt(genesisHash,
-                                                        timeout=600, 
-                                                        poll_latency=1)
+                                                           timeout=600, 
+                                                           poll_latency=1)
+        if receipt.get("status", 0) != 1:
+            raise RuntimeError(
+                f"Manager deployment failed (tx={genesisHash.hex()}, status={receipt.get('status')}). "
+                "Check Sepolia gas settings and account balance."
+            )
+
         self.gas_deploy.append(receipt["gasUsed"])
         self.txHashes.append(("buildManager", receipt["transactionHash"].hex()))
+
+        deployed_address = self.w3.to_checksum_address(receipt.contractAddress)
+        self.manager = self.w3.eth.contract(address=deployed_address, abi=manager_abi)
         
-        self.manager.address = receipt.contractAddress
         print("\n{:<17} {} | {}\n".format("Manager deployed", 
-                                        "@ Address " + self.manager.address, 
-                                        genesisHash.hex()[0:6]+"..."))
+                                          "@ Address " + self.manager.address, 
+                                          genesisHash.hex()[0:6]+"..."))
         print("-----------------------------------------------------------------------------------")
         return 
 
@@ -73,10 +83,11 @@ class FLManager(ConnectionHelper):
     
     def get_model_count_of(self, p):
         print(f"[DEBUG] get_model_count_of(): manager.address={self.manager.address}, "
-            f"participant.address={p.address}, challenge.address={getattr(self, 'challenge_contract', None) and getattr(self.challenge_contract, 'address', None)}")
+              f"participant.address={p.address}, "
+              f"challenge.address={getattr(self, 'challenge_contract', None) and getattr(self.challenge_contract, 'address', None)}")
 
-        # Call the function on the challenge contract, not the manager
-        return self.challenge_contract.functions.ModelCountOf(p.address).call({
+        # ModelCountOf is exposed on the manager contract ABI
+        return self.manager.functions.ModelCountOf(p.address).call({
             "from": p.address
         })
 
@@ -111,7 +122,8 @@ class FLManager(ConnectionHelper):
             ).transact(tx)
         else:
             nonce = self.w3.eth.get_transaction_count(deployer)
-            depl = super().build_non_fork_tx(deployer, nonce, self.manager.address, value)
+            # When building the transaction via contract ABI we must not pre-set the `to` field.
+            depl = super().build_non_fork_tx(deployer, nonce, value=value)
             depl = self.manager.functions.deployModel(
                 model_hash_bytes,
                 min_buyin,
@@ -125,26 +137,35 @@ class FLManager(ConnectionHelper):
             txHash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
 
         receipt = self.w3.eth.wait_for_transaction_receipt(txHash, timeout=600, poll_latency=1)
+        if receipt.get("status", 0) != 1:
+            raise RuntimeError(
+                f"Challenge deployment failed (tx={txHash.hex()}, status={receipt.get('status')}). "
+                "Contract creation likely ran out of gas or reverted. "
+                "Recheck reward/buy-in sizing and Sepolia balances."
+            )
+
         self.gas_deploy.append(receipt["gasUsed"])
         self.txHashes.append(("buildChallenge", receipt["transactionHash"].hex()))
 
-        # ✅ FIX STARTS HERE
-        self.challenge_contract = super().initialize_model()
+        challenge_contract_template = super().initialize_model()
+        challenge_abi = challenge_contract_template.abi
 
-        # Ensure ABI is tied to deployed manager address
+        deployed_challenge_address = None
+        for log in receipt["logs"]:
+            log_address = self.w3.to_checksum_address(log["address"])
+            if log_address.lower() != self.manager.address.lower():
+                deployed_challenge_address = log_address
+                break
+
+        if deployed_challenge_address is None:
+            print("[WARN] Challenge address not found in logs, falling back to manager mapping.")
+            c = self.get_model_count_of(self.pytorch_model.participants[0])
+            deployed_challenge_address = self.get_model_of(self.pytorch_model.participants[0], c)
+
         self.challenge_contract = self.w3.eth.contract(
-            address=self.manager.address,
-            abi=self.challenge_contract.abi
+            address=deployed_challenge_address,
+            abi=challenge_abi
         )
-
-        if not getattr(self.manager, "address", None):
-            print("⚙️ Manager address lost, restoring from previous deploy...")
-            self.manager.address = self.w3.to_checksum_address(receipt.contractAddress)
-        else:
-            self.manager.address = self.w3.to_checksum_address(self.manager.address)
-
-        c = self.get_model_count_of(self.pytorch_model.participants[0])
-        self.challenge_contract.address = self.get_model_of(self.pytorch_model.participants[0], c)
 
 
         print("\n{:<17} {} | {}\n".format(

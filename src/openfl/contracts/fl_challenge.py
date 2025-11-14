@@ -49,10 +49,10 @@ class FLChallenge(FLManager):
                 txHash = self.model.functions.register().transact(tx)
             else:          
                 nonce = self.w3.eth.get_transaction_count(acc.address) 
-                reg = super().build_non_fork_tx(acc.address, nonce, self.modelAddress, acc.collateral)   
+                reg = super().build_non_fork_tx(acc.address, nonce, value=acc.collateral)   
                 reg = self.model.functions.register().build_transaction(reg)
-                signed = self.w3.eth.account.signTransaction(reg, private_key=acc.privateKey)
-                txHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
+                signed = self.w3.eth.account.sign_transaction(reg, private_key=acc.privateKey)
+                txHash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
             txs.append(txHash)
             bal = self.w3.eth.get_balance(self.w3.eth.default_account)
             acc.isRegistered = True
@@ -106,10 +106,10 @@ class FLChallenge(FLManager):
 
             else:          
                 nonce = self.w3.eth.get_transaction_count(acc.address) 
-                hw = super().build_non_fork_tx(acc.address, nonce, self.modelAddress, 0)   
+                hw = super().build_non_fork_tx(acc.address, nonce)   
                 hw =  self.model.functions.provideHashedWeights(acc.hashedModel, acc.secret).build_transaction(hw)
-                signed = self.w3.eth.account.signTransaction(hw, private_key=acc.privateKey)
-                txHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
+                signed = self.w3.eth.account.sign_transaction(hw, private_key=acc.privateKey)
+                txHash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
             txs.append(txHash)
             print("{:<17}   {} | {} | {:>25,.0f} WEI".format("Weights provided:", 
                                                                          acc.address[0:16] + "...", 
@@ -139,11 +139,11 @@ class FLChallenge(FLManager):
             if self.fork:
                 txHash = self.model.functions.feedback(target.address, score).transact(tx)
             else:          
-                nonce = self.w3.eth.get_transaction_count(acc.address) 
-                fe = super().build_non_fork_tx(acc.address, nonce, self.modelAddress, 0)   
+                nonce = self.w3.eth.get_transaction_count(feedbackGiver.address) 
+                fe = super().build_non_fork_tx(feedbackGiver.address, nonce)   
                 fe =  self.model.functions.feedback(target.address, score).build_transaction(fe)
-                signed = self.w3.eth.account.signTransaction(fe, private_key=acc.privateKey)
-                txHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
+                signed = self.w3.eth.account.sign_transaction(fe, private_key=feedbackGiver.privateKey)
+                txHash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
         except ContractLogicError as e:
             if "FRC" in str(e):
                 input("Inactive users found - such users do not provide hashed weights.. \nGoing to forward time for 1 day\n")
@@ -292,8 +292,8 @@ class FLChallenge(FLManager):
             else:
                 nonce = self.w3.eth.get_transaction_count(_from)
                 hw = super().build_non_fork_tx(_from, nonce, self.modelAddress, 0, data)
-                signed = self.w3.eth.account.signTransaction(hw, private_key=private_key)
-                tx_hash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
+                signed = self.w3.eth.account.sign_transaction(hw, private_key=private_key)
+                tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
 
         except ContractLogicError as e:
             if "FRC" in str(e):
@@ -326,14 +326,11 @@ class FLChallenge(FLManager):
             
         else:          
             nonce = self.w3.eth.get_transaction_count(self.pytorch_model.participants[0].address, 'pending') 
-            cl = super().build_non_fork_tx(self.pytorch_model.participants[0].address, 
-                                        nonce, 
-                                        self.modelAddress, 
-                                        0)   
+            cl = super().build_non_fork_tx(self.pytorch_model.participants[0].address, nonce)   
             cl =  self.model.functions.closeRound().build_transaction(cl)
             pk = self.pytorch_model.participants[0].privateKey
-            signed = self.w3.eth.account.signTransaction(cl, private_key=pk)
-            txHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
+            signed = self.w3.eth.account.sign_transaction(cl, private_key=pk)
+            txHash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
             
         receipt = self.w3.eth.wait_for_transaction_receipt(txHash,
                                                             timeout=600, 
@@ -371,10 +368,10 @@ class FLChallenge(FLManager):
             else:
                 w3 = ConnectionHelper.get_w3()          
                 nonce = w3.eth.get_transaction_count(acc.address) 
-                sl = super().build_non_fork_tx(acc.address, nonce, self.modelAddress, 0)   
+                sl = super().build_non_fork_tx(acc.address, nonce)   
                 sl =  self.model.functions.registerSlot(reservation).build_transaction(sl)
-                signed = w3.eth.account.signTransaction(sl, private_key=acc.privateKey)
-                txHash = w3.eth.sendRawTransaction(signed.rawTransaction)
+                signed = w3.eth.account.sign_transaction(sl, private_key=acc.privateKey)
+                txHash = w3.eth.send_raw_transaction(signed.raw_transaction)
             txs.append(txHash)
             print("{:<17}   {} | {} | {:>25,.0f} WEI".format("Slot registered: ", 
                                                                          acc.address[0:16] + "...", 
@@ -408,10 +405,10 @@ class FLChallenge(FLManager):
             else:
                 w3 = ConnectionHelper.get_w3()          
                 nonce = w3.eth.get_transaction_count(acc.address) 
-                ex = super().build_non_fork_tx(acc.address, nonce, self.modelAddress, 0)   
+                ex = super().build_non_fork_tx(acc.address, nonce)   
                 ex =  self.model.functions.exitModel().build_transaction(ex)
-                signed = w3.eth.account.signTransaction(ex, private_key=acc.privateKey)
-                txHash = w3.eth.sendRawTransaction(signed.rawTransaction)
+                signed = w3.eth.account.sign_transaction(ex, private_key=acc.privateKey)
+                txHash = w3.eth.send_raw_transaction(signed.raw_transaction)
             txs.append(txHash)
             print("{:<17}   {} | {} | {:>27,.0f} WEI".format("Account exited:  ", 
                                                              acc.address[0:16] + "...", 
@@ -541,14 +538,14 @@ class FLChallenge(FLManager):
                                                                        u.is_contrib_score_negative).transact(tx)
             else:  # TODO: Dobbeltjek at logic er rigtig her.
                 nonce = self.w3.eth.get_transaction_count(u.address)
-                cl = super().build_non_fork_tx(u.address,
-                                            nonce,
-                                            self.modelAddress)
-                cl = self.model.functions.settleContributionScore(abs(score),
-                                                                  u.is_contrib_score_negative).build_transaction(cl)
-                pk = u.private_key
-                signed = self.w3.eth.account.signTransaction(cl, private_key=pk)
-                tx_hash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
+                cl = super().build_non_fork_tx(u.address, nonce)
+                cl = self.model.functions.submitContributionScore(
+                    abs(score),
+                    u.is_contrib_score_negative
+                ).build_transaction(cl)
+                pk = u.privateKey
+                signed = self.w3.eth.account.sign_transaction(cl, private_key=pk)
+                tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
             txs.append(tx_hash)
 
             print(green(f"\nUSER @ {u.id}"))

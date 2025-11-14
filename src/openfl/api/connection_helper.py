@@ -172,16 +172,17 @@ class ConnectionHelper:
     
     
     
-    def build_non_fork_tx(self, addr, nonce, to=None, value=0, data=None):
+    def build_non_fork_tx(self, addr, nonce, to=None, value=0, data=None, gas_limit=None):
         # Dynamically detect correct chain ID
         chain_id = w3.eth.chain_id
 
-        # Reasonable gas limit (reduce from 10M to 2M)
-        gas_limit = 2_000_000
+        # Give on-chain deployments breathing room unless caller overrides
+        if gas_limit is None:
+            gas_limit = 5_000_000
 
         # Adaptive low gas fee settings
-        max_fee_per_gas = w3.to_wei(2, 'gwei')
-        max_priority_fee_per_gas = w3.to_wei(0.1, 'gwei')
+        max_fee_per_gas = w3.to_wei(10, 'gwei')
+        max_priority_fee_per_gas = w3.to_wei(1, 'gwei')
 
         # Check balance before building TX
         balance = w3.eth.get_balance(addr)
