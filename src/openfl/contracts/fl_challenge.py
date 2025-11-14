@@ -50,7 +50,7 @@ class FLChallenge(FLManager):
             else:          
                 nonce = self.w3.eth.get_transaction_count(acc.address) 
                 reg = super().build_non_fork_tx(acc.address, nonce, self.modelAddress, acc.collateral)   
-                reg = self.model.functions.register().buildTransaction(reg)
+                reg = self.model.functions.register().build_transaction(reg)
                 signed = self.w3.eth.account.signTransaction(reg, private_key=acc.privateKey)
                 txHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
             txs.append(txHash)
@@ -107,7 +107,7 @@ class FLChallenge(FLManager):
             else:          
                 nonce = self.w3.eth.get_transaction_count(acc.address) 
                 hw = super().build_non_fork_tx(acc.address, nonce, self.modelAddress, 0)   
-                hw =  self.model.functions.provideHashedWeights(acc.hashedModel, acc.secret).buildTransaction(hw)
+                hw =  self.model.functions.provideHashedWeights(acc.hashedModel, acc.secret).build_transaction(hw)
                 signed = self.w3.eth.account.signTransaction(hw, private_key=acc.privateKey)
                 txHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
             txs.append(txHash)
@@ -141,7 +141,7 @@ class FLChallenge(FLManager):
             else:          
                 nonce = self.w3.eth.get_transaction_count(acc.address) 
                 fe = super().build_non_fork_tx(acc.address, nonce, self.modelAddress, 0)   
-                fe =  self.model.functions.feedback(target.address, score).buildTransaction(fe)
+                fe =  self.model.functions.feedback(target.address, score).build_transaction(fe)
                 signed = self.w3.eth.account.signTransaction(fe, private_key=acc.privateKey)
                 txHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
         except ContractLogicError as e:
@@ -291,7 +291,7 @@ class FLChallenge(FLManager):
                 tx_hash = self.w3.eth.send_transaction({'to': _to, 'from': _from, 'data': data})
             else:
                 nonce = self.w3.eth.get_transaction_count(_from)
-                hw = super().buildNonForkTx(_from, nonce, self.modelAddress, 0, data)
+                hw = super().build_non_fork_tx(_from, nonce, self.modelAddress, 0, data)
                 signed = self.w3.eth.account.signTransaction(hw, private_key=private_key)
                 tx_hash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
 
@@ -325,12 +325,12 @@ class FLChallenge(FLManager):
             txHash = self.model.functions.closeRound().transact(tx)
             
         else:          
-            nonce = self.w3.eth.get_transaction_count(self.pytorch_model.participants[0].address) 
+            nonce = self.w3.eth.get_transaction_count(self.pytorch_model.participants[0].address, 'pending') 
             cl = super().build_non_fork_tx(self.pytorch_model.participants[0].address, 
                                         nonce, 
                                         self.modelAddress, 
                                         0)   
-            cl =  self.model.functions.closeRound().buildTransaction(cl)
+            cl =  self.model.functions.closeRound().build_transaction(cl)
             pk = self.pytorch_model.participants[0].privateKey
             signed = self.w3.eth.account.signTransaction(cl, private_key=pk)
             txHash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
@@ -372,7 +372,7 @@ class FLChallenge(FLManager):
                 w3 = ConnectionHelper.get_w3()          
                 nonce = w3.eth.get_transaction_count(acc.address) 
                 sl = super().build_non_fork_tx(acc.address, nonce, self.modelAddress, 0)   
-                sl =  self.model.functions.registerSlot(reservation).buildTransaction(sl)
+                sl =  self.model.functions.registerSlot(reservation).build_transaction(sl)
                 signed = w3.eth.account.signTransaction(sl, private_key=acc.privateKey)
                 txHash = w3.eth.sendRawTransaction(signed.rawTransaction)
             txs.append(txHash)
@@ -409,7 +409,7 @@ class FLChallenge(FLManager):
                 w3 = ConnectionHelper.get_w3()          
                 nonce = w3.eth.get_transaction_count(acc.address) 
                 ex = super().build_non_fork_tx(acc.address, nonce, self.modelAddress, 0)   
-                ex =  self.model.functions.exitModel().buildTransaction(ex)
+                ex =  self.model.functions.exitModel().build_transaction(ex)
                 signed = w3.eth.account.signTransaction(ex, private_key=acc.privateKey)
                 txHash = w3.eth.sendRawTransaction(signed.rawTransaction)
             txs.append(txHash)
@@ -541,11 +541,11 @@ class FLChallenge(FLManager):
                                                                        u.is_contrib_score_negative).transact(tx)
             else:  # TODO: Dobbeltjek at logic er rigtig her.
                 nonce = self.w3.eth.get_transaction_count(u.address)
-                cl = super().buildNonForkTx(u.address,
+                cl = super().build_non_fork_tx(u.address,
                                             nonce,
                                             self.modelAddress)
                 cl = self.model.functions.settleContributionScore(abs(score),
-                                                                  u.is_contrib_score_negative).buildTransaction(cl)
+                                                                  u.is_contrib_score_negative).build_transaction(cl)
                 pk = u.private_key
                 signed = self.w3.eth.account.signTransaction(cl, private_key=pk)
                 tx_hash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
