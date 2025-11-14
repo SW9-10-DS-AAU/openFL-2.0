@@ -102,7 +102,6 @@ contract OpenFLModel {
                    uint globalReputation,
                    int newRoundReputation);
 
-    // TODO: Optimer! behøver vi overhovedet at sende et event tilbage? Og hvis ja, så behøver det jo nok ikke nogen values.
     event ContributionScoreSubmitted(
         address indexed user,
         uint256 contributionScore,
@@ -113,7 +112,7 @@ contract OpenFLModel {
 
     event EndRound(uint8 round,
                    uint8 validVotes,
-                   uint rewardPerVote,
+                   uint sumOfWeights,
                    uint totalPunishment);
 
     event Punishment(address victim,
@@ -327,7 +326,7 @@ contract OpenFLModel {
         // Devide reward between every user who provided (non-malicious) feedback
         // Pay back freeriderLock funds to good users
         // First round users pay their anti-freerider fee
-        uint rewardPerVote = 0;
+        uint sumOfWeights = 0;
         if (votesPerRound > 0 && rewardLeft >= rewardPerRound) {
             rewardLeft -= rewardPerRound;
 
@@ -335,8 +334,6 @@ contract OpenFLModel {
             if (totalPunishment > 0){
                 reward += totalPunishment;
             }
-
-            uint sumOfWeights = 0;
 
             // Compute weights
             for (uint i=0; i < participants.length; i++) {
@@ -368,12 +365,11 @@ contract OpenFLModel {
                     } else {
                         GlobalReputationOf[participants[i]] += personalReward;
                     }
-                     // TODO: maybe give negative reputation
-                    emit Reward(user, RoundReputationOf[user], personalReward, GlobalReputationOf[user]); // TODO: we updated win, but do we need to update roundScore?
+                    emit Reward(user, RoundReputationOf[user], personalReward, GlobalReputationOf[user]);
                 }
             }
         }
-        emit EndRound(round, votesPerRound, rewardPerVote, totalPunishment); // TODO: emit noget mere relevant end rewardspervote
+        emit EndRound(round, votesPerRound, sumOfWeights, totalPunishment);
 
         // Reset variables
         for (uint i=0; i<participants.length; i++) {

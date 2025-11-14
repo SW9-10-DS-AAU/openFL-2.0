@@ -474,7 +474,7 @@ class FLChallenge(FLManager):
                 args = ev["args"]
                 print(b(f"\nEND OF ROUND {args['round'] + 1}"))
                 print(b(f"VALID VOTES:      {args['validVotes']}"))
-                print(b(f"REWARD PER VOTE:  {args['rewardPerVote']:,}"))
+                print(b(f"SUM OF WEIGHTS:  {args['sumOfWeights']:,}"))
                 print(b(f"TOTAL PUNISHMENT: {args['totalPunishment']:,}\n"))
             print("-----------------------------------------------------------------------------------\n")
 
@@ -524,39 +524,40 @@ class FLChallenge(FLManager):
 
         print()
 
-    # def contribution_score(self, _users):
-    #     print("START CONTRIBUTION SCORE\n")
-    #     merged_model = _users[0].model
-    #     num_mergers = len(_users)
-    #     txs = []
-    #     for u in _users:
-    #         u.roundRep = 0
-    #         score = calc_contribution_score(u.previousModel, merged_model, num_mergers)
-    #         u.is_contrib_score_negative = True if score < 0 else False
-    #         u.contribution_score = score
-    #
-    #         if self.fork:
-    #             tx = super().build_tx(u.address, self.modelAddress)
-    #             tx_hash = self.model.functions.submitContributionScore(abs(score),
-    #                                                                    u.is_contrib_score_negative).transact(tx)
-    #         else:  # TODO: Dobbeltjek at logic er rigtig her.
-    #             nonce = self.w3.eth.get_transaction_count(u.address)
-    #             cl = super().buildNonForkTx(u.address,
-    #                                         nonce,
-    #                                         self.modelAddress)
-    #             cl = self.model.functions.settleContributionScore(abs(score),
-    #                                                               u.is_contrib_score_negative).buildTransaction(cl)
-    #             pk = u.private_key
-    #             signed = self.w3.eth.account.signTransaction(cl, private_key=pk)
-    #             tx_hash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
-    #         txs.append(tx_hash)
-    #
-    #         print(green(f"\nUSER @ {u.id}"))
-    #         print(green(f"{'CONTRIBUTION SCORE:':25} {u.contribution_score:}"))
-    #
-    #     for i, txHash in enumerate(txs):
-    #         self.log_receipt(i, txHash, len(txs), "contribution_score")
-    #     print("-----------------------------------------------------------------------------------\n")
+    def contribution_score_old(self, _users):
+        print("START CONTRIBUTION SCORE\n")
+        merged_model = _users[0].model
+        num_mergers = len(_users)
+        txs = []
+        for u in _users:
+            u.roundRep = 0
+            score = calc_contribution_score(u.previousModel, merged_model, num_mergers)
+            u.is_contrib_score_negative = True if score < 0 else False
+            u.contribution_score = score
+
+            if self.fork:
+                tx = super().build_tx(u.address, self.modelAddress)
+                tx_hash = self.model.functions.submitContributionScore(abs(score),
+                                                                       u.is_contrib_score_negative).transact(tx)
+            else:
+                nonce = self.w3.eth.get_transaction_count(u.address)
+                cl = super().buildNonForkTx(u.address,
+                                            nonce,
+                                            self.modelAddress)
+                cl = self.model.functions.settleContributionScore(abs(score),
+                                                                  u.is_contrib_score_negative).buildTransaction(cl)
+                pk = u.private_key
+                signed = self.w3.eth.account.signTransaction(cl, private_key=pk)
+                tx_hash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
+            txs.append(tx_hash)
+
+            print(green(f"\nUSER @ {u.id}"))
+            print(green(f"{'CONTRIBUTION SCORE:':25} {u.contribution_score:}"))
+
+        for i, txHash in enumerate(txs):
+            self.log_receipt(i, txHash, len(txs), "con_score")
+        print("-----------------------------------------------------------------------------------\n")
+
 
 
     # New contribution score
@@ -617,6 +618,7 @@ class FLChallenge(FLManager):
 
         print("-----------------------------------------------------------------------------------\n")
 
+
     def simulate(self, rounds):
         hashedWeights = []
         self.register_all_users()
@@ -655,7 +657,7 @@ class FLChallenge(FLManager):
                 i, j = user._globalrep[-2:]
                 print(b("{}  {:>25,.0f} -> {:>25,.0f}".format(user.address[0:16] + "...", i, j)))
 
-            self.print_round_summary(receipt)  # TODO: Vi henter global reputation score heinde. Skal den sættes for hver user i python, eller henter vi den fra smart contracten næste gang den bruges alliegevel?
+            self.print_round_summary(receipt)
 
         self.exit_system()
             
@@ -785,7 +787,8 @@ def calc_contribution_score(local_model, global_model, num_mergers, eps=1e-12) -
         eps: float, small tolerance to avoid division by zero
 
     Returns:
-        float, contribution score
+        contribution score in WEI.
+        1 * 1e18 is 100% contribution score
     """
 
     # Flatten parameters
@@ -794,8 +797,9 @@ def calc_contribution_score(local_model, global_model, num_mergers, eps=1e-12) -
 
     norm_U_sq = torch.dot(global_update, global_update)
 
-    if norm_U_sq.abs() < eps:  # Global update very small. To avoid division by 0
-        return 0
+    if norm_U_sq.abs() < eps:
+        score = Decimal(1) / Decimal(num_mergers)
+        return int(score * Decimal('1e18'))
     score = torch.dot(local_update, global_update) / (num_mergers * norm_U_sq)
 
     return int(Decimal(score.item()) * Decimal('1e18'))
