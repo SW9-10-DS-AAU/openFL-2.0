@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import torch.multiprocessing as mp
 import os
+import time
 from web3 import Web3
 from termcolor import colored
 from typing import Tuple, Dict
@@ -22,7 +23,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 USE_CUDA = (DEVICE.type == "cuda")
 PIN_MEMORY = USE_CUDA
 NON_BLOCKING = USE_CUDA
-NUM_WORKERS = min(4, os.cpu_count() // 2) if torch.cuda.is_available() else 0 # ONLY SAFE ON LINUX (SERVER)
+NUM_WORKERS = min(4, os.cpu_count() // 2) if torch.cuda.is_available() else 0
 PERSISTENT_WORKERS = USE_CUDA and NUM_WORKERS > 0
 AMP = USE_CUDA # Optional: mixed precision on CUDA
 
@@ -309,14 +310,18 @@ class PytorchModel:
 
     def federated_training(self):
         print(b("\n================ PARALLEL FEDERATED TRAINING START ================"))
-
+    
         num_gpus = torch.cuda.device_count()
-        print(f"Detected {num_gpus} GPU(s) → {'Parallel' if num_gpus > 0 else 'CPU sequential'} mode")
-
         ctx = mp.get_context("spawn")
-        num_processes = min(len(self.participants), max(1, num_gpus))
+        num_processes = min(len(self.participants), num_gpus if num_gpus > 0 else os.cpu_count())
+
+        print_training_mode(num_gpus, num_processes)
+
+        start_total = time.perf_counter()
 
         with ctx.Pool(processes=num_processes) as pool:
+            start_pool = time.perf_counter()
+
             async_results = []
             for idx, user in enumerate(self.participants):
                 device_id = idx % max(1, num_gpus)
@@ -335,6 +340,7 @@ class PytorchModel:
                 ))
 
             results = [r.get() for r in async_results]
+        end_pool = time.perf_counter()
 
         # Apply results back to participants
         user_map = {u.id: u for u in self.participants}
@@ -346,7 +352,12 @@ class PytorchModel:
             u._loss.append(loss)
             u.hashedModel = self.get_hash(u.model.state_dict())
 
+        total_time = time.perf_counter() - start_total
+        parallel_time = end_pool - start_pool
+
         print(b("=================== PARALLEL TRAINING END ===================\n"))
+        print(green(f"Parallel execution time: {parallel_time:.2f} seconds"))
+        print(green(f"Total federated training time: {total_time:.2f} seconds\n"))
 
     
     def let_malicious_users_do_their_work(self):
@@ -597,6 +608,9 @@ def b(string):
 def red(text):
     return colored(text, "red")
 
+def yellow(text):
+    return colored(text, "yellow", attrs=["bold"])
+
 
 def manipulate(model, scale: float = 1.0) -> OrderedDict:
     sd = OrderedDict()
@@ -659,10 +673,39 @@ def _train_user_proc(user_id, model_state, train_ds, val_ds, epochs, device_id, 
 
         # Rebuild dataloaders inside the process
         train_loader = DataLoader(train_ds, batch_size=batchsize, shuffle=shuffle, pin_memory=pin_memory)
-        val_loader = DataLoader(val_ds, batch_size=batchsize, shuffle=shuffle, pin_memory=pin_memory)
+        val_loader = DataLoader(val_ds, batch_size=batchsize, shuffle=False, pin_memory=pin_memory)
 
         train(model, train_loader, epochs, device)
         loss, acc = test(model, val_loader, device)
 
-        print(f"[GPU {device_id}] User {user_id} done | Acc: {acc:.3f}")
+        print(f"[{device_label(device, device_id)}] User {user_id} done | Acc: {acc:.3f}")
         return user_id, model.state_dict(), loss, acc
+
+
+def print_training_mode(num_gpus: int, num_processes: int):
+    """Prints a clean status message describing how training will run."""
+    if num_gpus >= 2:
+        print(green(f"Detected {num_gpus} GPU(s) → Parallel multi-GPU training"))
+
+    elif num_gpus == 1:
+        if num_processes > 1:
+            print(yellow(
+                f"Detected 1 GPU → Parallel training on one GPU (shared across {num_processes} workers)"
+            ))
+        else:
+            print(green("Detected 1 GPU → Sequential GPU training"))
+
+    else:  # CPU-only
+        if num_processes > 1:
+            print(yellow(
+                f"Detected 0 GPU(s) → Parallel CPU training ({num_processes} workers)"
+            ))
+        else:
+            print(red("Detected 0 GPU(s) → Sequential CPU mode"))
+
+
+def device_label(device: torch.device, device_id: int = 0) -> str:
+    if device.type == "cuda":
+        return f"GPU {device_id}"
+    else:
+        return "CPU"
