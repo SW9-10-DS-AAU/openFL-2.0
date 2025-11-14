@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-//
-//   ___                   _____ _     
-//  / _ \ _ __   ___ _ __ |  ___| |    
-// | | | | '_ \ / _ \ '_ \| |_  | |    
-// | |_| | |_) |  __/ | | |  _| | |___ 
-//  \___/| .__/ \___|_| |_|_|   |_____|
-//       |_| 
+//  _______  _______  _______  _        _______  _          _______     _______
+// (  ___  )(  ____ )(  ____ \( (    /|(  ____ \( \        / ___   )   (  __   )
+// | (   ) || (    )|| (    \/|  \  ( || (    \/| (        \/   )  |   | (  )  |
+// | |   | || (____)|| (__    |   \ | || (__    | |            /   )   | | /   |
+// | |   | ||  _____)|  __)   | (\ \) ||  __)   | |          _/   /    | (/ /) |
+// | |   | || (      | (      | | \   || (      | |         /   _/     |   / | |
+// | (___) || )      | (____/\| )  \  || )      | (____/\  (   (__/\ _ |  (__) |
+// (_______)|/       (_______/|/    )_)|/       (_______/  \_______/(_)(_______)
 // OpenFL is a Ethereum-based reputation system to facilitate federated learning. 
 // This contract is part of the OpenFL research paper by Anton Wahrstätter. The contracts do only 
 // represent Proof-of-Concepts and have not been developed to be used in productive

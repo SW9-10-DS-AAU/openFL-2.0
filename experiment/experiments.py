@@ -1,7 +1,7 @@
 import experiment_runner as ExperimentRunner
 from experiment_configuration import ExperimentConfiguration
 
-config = ExperimentConfiguration(epochs=1, minimum_rounds=1)
+config = ExperimentConfiguration()
 
 #DATASET = "cifar-10"
 DATASET = "mnist"

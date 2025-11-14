@@ -1,13 +1,12 @@
 # OpenFL: Decentralized Federated Learning on Public Blockchain Systems
 
 ```
-//   ___                   _____ _     
-//  / _ \ _ __   ___ _ __ |  ___| |    
-// | | | | '_ \ / _ \ '_ \| |_  | |    
-// | |_| | |_) |  __/ | | |  _| | |___ 
-//  \___/| .__/ \___|_| |_|_|   |_____|
-//       |_|                           
-//
+   ___                   _____ _       ____    ___  
+  / _ \ _ __   ___ _ __ |  ___| |     |___ \  / _ \ 
+ | | | | '_ \ / _ \ '_ \| |_  | |       __) || | | |
+ | |_| | |_) |  __/ | | |  _| | |___   / __/ | |_| |
+  \___/| .__/ \___|_| |_|_|   |_____| |_____(_)___/ 
+       |_|                                          
 ```
 
 # Getting started
@@ -31,6 +30,9 @@ PRIVATE_KEYS="<Private keys from your accounts colon separated (for non-locally 
 ## 3. Requirements
 - Only tested with Python3.10
 - Run ``pip install -e .[dev]``
+
+Build the abi and bytecode files from the smart contracts
+``python scripts/compile_contracts.py``
 
 ## 4. Running an Experiment
 The Experiment folder contains files for running experiments on different datasets.
