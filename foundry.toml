@@ -1,0 +1,9 @@
+[profile.default]
+src = "contracts"   # point to your existing contracts folder
+out = "out"         # optional, compiled artifacts go here
+test = "tests/solidity"
+libs = ["lib"]
+
+remappings = [
+    "forge-std/=lib/forge-std/src/"
+]
