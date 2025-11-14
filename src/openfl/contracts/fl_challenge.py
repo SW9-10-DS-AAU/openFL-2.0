@@ -735,7 +735,8 @@ def calc_contribution_score(local_model, global_model, num_mergers, eps=1e-12) -
     norm_U_sq = torch.dot(global_update, global_update)
 
     if norm_U_sq.abs() < eps:
-        return 0
+        score = Decimal(1) / Decimal(num_mergers)
+        return int(score * Decimal('1e18'))
     score = torch.dot(local_update, global_update) / (num_mergers * norm_U_sq)
 
     return int(Decimal(score.item()) * Decimal('1e18'))
