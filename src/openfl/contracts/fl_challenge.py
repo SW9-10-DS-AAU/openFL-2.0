@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import os
 import time
@@ -343,6 +344,7 @@ class FLChallenge(FLManager):
         settleStart = datetime.datetime.now(datetime.timezone.utc).timestamp()
         while (datetime.datetime.now(datetime.timezone.utc).timestamp() < settleStart + ONEDAYINSECONDS):
             if (self.model.functions.isFeedBackRoundDone().call()):
+                print("Feedback round completed")
                 break
             
             print("Feedback round not done, sleeping for 10 seconds...")
@@ -354,8 +356,8 @@ class FLChallenge(FLManager):
         contributionStart = datetime.datetime.now(datetime.timezone.utc).timestamp()
         while (datetime.datetime.now(datetime.timezone.utc).timestamp() < contributionStart + ONEDAYINSECONDS):
             if (self.model.functions.isContributionRoundDone().call()):
+                print("Contribution round completed")
                 break
-            print(self.model.functions.getFeedBackRoundDone().call())
             print("Contribution round not done, sleeping for 10 seconds...")
             time.sleep(10)
         else:
@@ -631,9 +633,11 @@ class FLChallenge(FLManager):
             
             print(b("\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"))
 
+            #contributionScoreTask = asyncio.create_task(self.contribution_score([user for user in self.pytorch_model.participants if user.roundRep > 0]))
             self.contribution_score([user for user in self.pytorch_model.participants if user.roundRep > 0])
-
             receipt = self.close_round()
+            #contributionScoreTask
+            
             print(b(f"Round {self.pytorch_model.round - 1} actually completed:"))
             for user in self.pytorch_model.participants + self.pytorch_model.disqualified:
                 user._globalrep.append(self.get_global_reputation_of_user(user.address))
