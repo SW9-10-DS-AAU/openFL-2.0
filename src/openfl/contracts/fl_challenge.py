@@ -727,7 +727,8 @@ def calc_contribution_score(local_model, global_model, num_mergers, eps=1e-12) -
         eps: float, small tolerance to avoid division by zero
 
     Returns:
-        float, contribution score
+        contribution score in WEI.
+        1 * 1e18 is 100% contribution score
     """
     local_update = torch.cat([p.data.view(-1) for p in local_model.parameters()])
     global_update = torch.cat([p.data.view(-1) for p in global_model.parameters()])
