@@ -80,7 +80,6 @@ class FLManager(ConnectionHelper):
         print(b("-----------------------------------------------------------------------------------"))
         min_buyin, max_buyin, reward, min_rounds, punishment, freerider_fee = args
         p1_collateral = self.pytorch_model.participants[0].collateral
-        print(reward)
         value = reward + p1_collateral
         deployer =  self.pytorch_model.participants[0].address
         modelHash = self.pytorch_model.participants[0].modelHash

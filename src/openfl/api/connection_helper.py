@@ -138,7 +138,6 @@ class ConnectionHelper:
     
     def initialize(self):
         bytecode_path = Path(__file__).resolve().parents[3] / "artifacts" / "bytecode"
-        print(bytecode_path)
         with open(bytecode_path / "abi.txt") as abiFile:
             abi = re.sub("\n|\t|\ ", "", abiFile.read())
         with open(bytecode_path /  "bytecode.txt") as abiFile:
