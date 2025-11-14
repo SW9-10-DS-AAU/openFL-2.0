@@ -325,20 +325,20 @@ class PytorchModel:
             async_results = []
             for idx, user in enumerate(self.participants):
                 device_id = idx % max(1, num_gpus)
+                sd_cpu = {k: v.cpu() for k, v in user.model.state_dict().items()} # safe copy
                 async_results.append(pool.apply_async(
                     _train_user_proc,
                     (user.id,
-                     user.model.state_dict(),
-                     user.train.dataset,
-                     user.val.dataset,
-                     self.EPOCHS,
-                     device_id,
-                     self.DATASET,
-                     self.BATCHSIZE,
-                     PIN_MEMORY,
-                     False)
+                    sd_cpu,
+                    user.train.dataset,
+                    user.val.dataset,
+                    self.EPOCHS,
+                    device_id,
+                    self.DATASET,
+                    self.BATCHSIZE,
+                    PIN_MEMORY,
+                    False)
                 ))
-
             results = [r.get() for r in async_results]
         end_pool = time.perf_counter()
 
@@ -679,6 +679,10 @@ def _train_user_proc(user_id, model_state, train_ds, val_ds, epochs, device_id, 
         loss, acc = test(model, val_loader, device)
 
         print(f"[{device_label(device, device_id)}] User {user_id} done | Acc: {acc:.3f}")
+        
+        # Ensure all GPU work is complete before worker exits
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
         return user_id, model.state_dict(), loss, acc
 
 
