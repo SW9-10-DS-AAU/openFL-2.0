@@ -524,31 +524,89 @@ class FLChallenge(FLManager):
 
         print()
 
+    # def contribution_score(self, _users):
+    #     print("START CONTRIBUTION SCORE\n")
+    #     merged_model = _users[0].model
+    #     num_mergers = len(_users)
+    #     txs = []
+    #     for u in _users:
+    #         u.roundRep = 0
+    #         score = calc_contribution_score(u.previousModel, merged_model, num_mergers)
+    #         u.is_contrib_score_negative = True if score < 0 else False
+    #         u.contribution_score = score
+    #
+    #         if self.fork:
+    #             tx = super().build_tx(u.address, self.modelAddress)
+    #             tx_hash = self.model.functions.submitContributionScore(abs(score),
+    #                                                                    u.is_contrib_score_negative).transact(tx)
+    #         else:  # TODO: Dobbeltjek at logic er rigtig her.
+    #             nonce = self.w3.eth.get_transaction_count(u.address)
+    #             cl = super().buildNonForkTx(u.address,
+    #                                         nonce,
+    #                                         self.modelAddress)
+    #             cl = self.model.functions.settleContributionScore(abs(score),
+    #                                                               u.is_contrib_score_negative).buildTransaction(cl)
+    #             pk = u.private_key
+    #             signed = self.w3.eth.account.signTransaction(cl, private_key=pk)
+    #             tx_hash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
+    #         txs.append(tx_hash)
+    #
+    #         print(green(f"\nUSER @ {u.id}"))
+    #         print(green(f"{'CONTRIBUTION SCORE:':25} {u.contribution_score:}"))
+    #
+    #     for i, txHash in enumerate(txs):
+    #         self.log_receipt(i, txHash, len(txs), "contribution_score")
+    #     print("-----------------------------------------------------------------------------------\n")
+
+
+    # New contribution score
     def contribution_score(self, _users):
         print("START CONTRIBUTION SCORE\n")
+
         merged_model = _users[0].model
         num_mergers = len(_users)
-        txs = []
+
+        # Flatten global (merged) model
+        global_update = torch.cat([p.data.view(-1) for p in merged_model.parameters()])
+
+        # Flatten all local previous models into a single tensor
+        local_updates = []
         for u in _users:
             u.roundRep = 0
-            score = calc_contribution_score(u.previousModel, merged_model, num_mergers)
+            local_update = torch.cat([p.data.view(-1) for p in u.previousModel.parameters()])
+            local_updates.append(local_update)
+
+        local_updates = torch.stack(local_updates)  # shape: (num_mergers, D)
+
+        # --- MAD-based contribution scores for all users in one go ---
+        scores = calc_contribution_scores_mad(local_updates, global_update)
+
+        txs = []
+        for u, score in zip(_users, scores):
             u.is_contrib_score_negative = True if score < 0 else False
             u.contribution_score = score
 
             if self.fork:
                 tx = super().build_tx(u.address, self.modelAddress)
-                tx_hash = self.model.functions.submitContributionScore(abs(score),
-                                                                       u.is_contrib_score_negative).transact(tx)
+                tx_hash = self.model.functions.submitContributionScore(
+                    abs(score),
+                    u.is_contrib_score_negative
+                ).transact(tx)
             else:  # TODO: Dobbeltjek at logic er rigtig her.
                 nonce = self.w3.eth.get_transaction_count(u.address)
-                cl = super().buildNonForkTx(u.address,
-                                            nonce,
-                                            self.modelAddress)
-                cl = self.model.functions.settleContributionScore(abs(score),
-                                                                  u.is_contrib_score_negative).buildTransaction(cl)
+                cl = super().buildNonForkTx(
+                    u.address,
+                    nonce,
+                    self.modelAddress
+                )
+                cl = self.model.functions.settleContributionScore(
+                    abs(score),
+                    u.is_contrib_score_negative
+                ).buildTransaction(cl)
                 pk = u.private_key
                 signed = self.w3.eth.account.signTransaction(cl, private_key=pk)
                 tx_hash = self.w3.eth.sendRawTransaction(signed.rawTransaction)
+
             txs.append(tx_hash)
 
             print(green(f"\nUSER @ {u.id}"))
@@ -556,8 +614,8 @@ class FLChallenge(FLManager):
 
         for i, txHash in enumerate(txs):
             self.log_receipt(i, txHash, len(txs), "contribution_score")
-        print("-----------------------------------------------------------------------------------\n")
 
+        print("-----------------------------------------------------------------------------------\n")
 
     def simulate(self, rounds):
         hashedWeights = []
@@ -729,6 +787,8 @@ def calc_contribution_score(local_model, global_model, num_mergers, eps=1e-12) -
     Returns:
         float, contribution score
     """
+
+    # Flatten parameters
     local_update = torch.cat([p.data.view(-1) for p in local_model.parameters()])
     global_update = torch.cat([p.data.view(-1) for p in global_model.parameters()])
 
@@ -739,3 +799,68 @@ def calc_contribution_score(local_model, global_model, num_mergers, eps=1e-12) -
     score = torch.dot(local_update, global_update) / (num_mergers * norm_U_sq)
 
     return int(Decimal(score.item()) * Decimal('1e18'))
+
+
+# New function
+def calc_contribution_scores_mad(local_updates: torch.Tensor,
+                                 global_update: torch.Tensor,
+                                 eps: float = 1e-12,
+                                 mad_thresh: float = 3.5):
+    """
+    Compute contribution scores using MAD-based outlier filtering on weights.
+
+    Args:
+        local_updates: Tensor of shape (num_mergers, D)
+                       flattened parameters for each user's local model.
+        global_update: Tensor of shape (D,)
+                       flattened parameters for the global (merged) model.
+        eps:           Small tolerance to avoid division by zero.
+        mad_thresh:    Threshold on robust z-score to mark outliers.
+
+    Returns:
+        List[int]: contribution scores scaled by 1e18, like before.
+    """
+
+    num_mergers, D = local_updates.shape
+
+    # --- MAD-based filtering (per-weight, across participants) ---
+    # Median across users per weight
+    median = local_updates.median(dim=0).values  # (D,)
+
+    # Absolute deviations from median
+    abs_dev = (local_updates - median).abs()     # (num_mergers, D)
+
+    # Median absolute deviation per weight
+    mad = abs_dev.median(dim=0).values           # (D,)
+
+    # Avoid division by zero in MAD
+    safe_mad = mad.clone()
+    safe_mad[safe_mad < eps] = eps
+
+    # Robust z-score for each weight/user
+    # 0.6745 factor makes MAD comparable to std for normal data
+    robust_z = 0.6745 * abs_dev / safe_mad       # (num_mergers, D)
+
+    # Mask of "non-outlier" weights: True = keep, False = outlier
+    mask = robust_z <= mad_thresh                # (num_mergers, D)
+
+    # Zero-out outlier weights for each user individually
+    filtered_local_updates = local_updates * mask
+
+    # --- Dot-product scoring with filtered updates ---
+    norm_U_sq = torch.dot(global_update, global_update)
+
+    if norm_U_sq.abs() < eps:
+        # Global update is basically zero => everyone gets 0
+        return [0 for _ in range(num_mergers)]
+
+    # For each user i: score_i = (u_i_filtered · U) / (num_mergers * ||U||^2)
+    dots = torch.mv(filtered_local_updates, global_update)  # (num_mergers,)
+    scores = dots / (num_mergers * norm_U_sq)
+
+    # Convert to your integer fixed-point format (×1e18)
+    int_scores = [
+        int(Decimal(score.item()) * Decimal('1e18'))
+        for score in scores
+    ]
+    return int_scores
