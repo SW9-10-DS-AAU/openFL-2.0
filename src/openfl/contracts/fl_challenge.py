@@ -386,7 +386,7 @@ class FLChallenge(FLManager):
         self.txHashes.append(("close", receipt["transactionHash"].hex()))
         self.gas_close.append(receipt["gasUsed"])
         if len(receipt.logs) == 0:
-            print("⚠️ Warning: closeFeedBackRound() emitted no logs")
+            print("Warning: closeFeedBackRound() emitted no logs")
         self.pytorch_model.round += 1
         self._reward_balance.append(self.get_reward_left())
         printer._print("\n-----------------------------------------------------------------------------------\n")
